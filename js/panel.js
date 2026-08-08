@@ -16,7 +16,9 @@ const Panel = (() => {
       optCircle: document.getElementById("opt-circle"),
       optPolygon: document.getElementById("opt-polygon"),
       optTime: document.getElementById("opt-time"),
+      optTrain: document.getElementById("opt-train"),
       optArea: document.getElementById("opt-area"),
+      trainStatus: document.getElementById("train-status"),
 
       circleRadius: document.getElementById("circle-radius"),
       circleRadiusVal: document.getElementById("circle-radius-val"),
@@ -51,6 +53,7 @@ const Panel = (() => {
     wireCircleOptions();
     wirePolygonOptions();
     wireTimeOptions();
+    wireTrainOptions();
     wireAreaOptions();
     wireConditionToggle();
   }
@@ -71,7 +74,7 @@ const Panel = (() => {
     els.shapeSelect.querySelectorAll(".shape-btn").forEach((b) => {
       b.classList.toggle("active", b.dataset.shape === shape);
     });
-    [els.optCircle, els.optPolygon, els.optTime, els.optArea].forEach((el) => el.classList.add("hidden"));
+    [els.optCircle, els.optPolygon, els.optTime, els.optTrain, els.optArea].forEach((el) => el.classList.add("hidden"));
 
     resetConditionPanel();
 
@@ -81,6 +84,9 @@ const Panel = (() => {
       els.optPolygon.classList.remove("hidden");
     } else if (shape === "time") {
       els.optTime.classList.remove("hidden");
+    } else if (shape === "train") {
+      els.optTrain.classList.remove("hidden");
+      els.trainStatus.textContent = "";
     } else if (shape === "area") {
       els.optArea.classList.remove("hidden");
     }
@@ -126,6 +132,22 @@ const Panel = (() => {
     els.orsApiKey.addEventListener("change", rebuildTimeShape);
 
     AppMap.on("timeOriginSet", rebuildTimeShape);
+  }
+
+  // ---------------- 電車商圏(新規) ----------------
+  function wireTrainOptions() {
+    AppMap.on("trainLoading", () => {
+      els.trainStatus.textContent = "最寄り駅を検索中…";
+    });
+    AppMap.on("trainShapeReady", (props) => {
+      if (props?.fallback) {
+        els.trainStatus.textContent = "最寄り駅が見つからなかったため、近似円で表示しています。";
+      } else if (props?.stationName) {
+        els.trainStatus.textContent = `最寄り駅: ${props.stationName}(起点から約${props.distanceM}m)`;
+      } else {
+        els.trainStatus.textContent = "";
+      }
+    });
   }
 
   // ---------------- 地域 ----------------

@@ -14,12 +14,28 @@
 </head>
 <body>
 
+<!-- ========== 上部ヘッダー ========== -->
+<header id="app-header">
+  <div class="app-header-left">
+    <i class="fa-solid fa-map-location-dot app-logo-icon"></i>
+    <div class="app-header-titles">
+      <span class="app-title">GISドライブ</span>
+      <span class="app-subtitle">商圏分析マップ with エリアプランニング</span>
+    </div>
+  </div>
+  <div class="app-header-right">
+    <button id="header-store-btn" class="header-icon-btn" title="店舗管理"><i class="fa-solid fa-shop"></i></button>
+    <button id="header-plan-btn" class="header-icon-btn" title="配達プラン作成"><i class="fa-solid fa-route"></i></button>
+    <button id="header-home-btn" class="header-icon-btn" title="表示をリセット"><i class="fa-solid fa-house"></i></button>
+  </div>
+</header>
+
 <div id="app">
 
   <!-- ========== 左サイドパネル ========== -->
   <aside id="side-panel">
     <header class="panel-header">
-      <i class="fa-solid fa-map-location-dot"></i>
+      <i class="fa-solid fa-sliders"></i>
       <span>商圏設定</span>
     </header>
 
@@ -35,6 +51,13 @@
         <ul id="search-results" class="search-results hidden"></ul>
       </section>
 
+      <!-- 業務ツール(新規) -->
+      <section class="panel-section">
+        <label class="section-title">業務ツール</label>
+        <button id="open-store-mgr-btn" class="btn-tool"><i class="fa-solid fa-shop"></i> 店舗管理</button>
+        <button id="open-plan-btn" class="btn-tool"><i class="fa-solid fa-route"></i> 配達プラン作成</button>
+      </section>
+
       <!-- 商圏の指定方法 -->
       <section class="panel-section">
         <label class="section-title">商圏の指定方法</label>
@@ -42,6 +65,7 @@
           <button class="shape-btn" data-shape="circle"><i class="fa-regular fa-circle"></i><span>円形</span></button>
           <button class="shape-btn" data-shape="polygon"><i class="fa-solid fa-draw-polygon"></i><span>多角形</span></button>
           <button class="shape-btn" data-shape="time"><i class="fa-regular fa-clock"></i><span>所要時間</span></button>
+          <button class="shape-btn" data-shape="train"><i class="fa-solid fa-train"></i><span>電車</span></button>
           <button class="shape-btn" data-shape="area"><i class="fa-solid fa-map"></i><span>地域</span></button>
         </div>
 
@@ -71,6 +95,12 @@
           <label class="opt-label">ORS APIキー(任意・道路network等時間圏)</label>
           <input type="text" id="ors-api-key" class="text-input" placeholder="未入力の場合は直線距離による近似円">
           <p class="hint">地図をクリックして起点を指定してください。</p>
+        </div>
+
+        <!-- 電車商圏オプション(新規) -->
+        <div class="shape-options hidden" id="opt-train">
+          <p class="hint">地図をクリックして起点(店舗等)を指定してください。最寄り駅(Overpass API)を自動検索し、徒歩圏+概算鉄道到達圏を表示します。駅が見つからない場合は近似円で代替表示します。</p>
+          <div id="train-status" class="hint small"></div>
         </div>
 
         <!-- 地域オプション -->
@@ -143,17 +173,301 @@
 
 </div>
 
+<!-- ========== 店舗管理ウィンドウ(新規) ========== -->
+<div id="store-mgr-window" class="floating-window hidden">
+  <div class="fw-header">
+    <span><i class="fa-solid fa-shop"></i> 店舗管理</span>
+    <span class="fw-header-actions">
+      <i class="fa-solid fa-window-minimize fw-min" id="store-mgr-min" title="最小化"></i>
+      <i class="fa-solid fa-xmark fw-close" id="store-mgr-close" title="閉じる"></i>
+    </span>
+  </div>
+  <div class="fw-tabs">
+    <button class="fw-tab active" id="store-tab-list" data-tab="list">店舗一覧</button>
+    <button class="fw-tab" id="store-tab-groups" data-tab="groups">グループ</button>
+  </div>
+  <div class="fw-body">
+
+    <div id="store-panel-list" class="fw-tab-panel">
+      <button id="store-add-btn" class="btn-tool"><i class="fa-solid fa-plus"></i> 店舗を追加</button>
+
+      <div id="store-form" class="inline-form hidden">
+        <label class="opt-label">店舗名</label>
+        <input type="text" id="store-form-name" class="text-input" placeholder="例: 千代田店">
+        <label class="opt-label">グループ</label>
+        <select id="store-form-group" class="text-input"></select>
+        <label class="opt-label">住所</label>
+        <div class="search-box">
+          <input type="text" id="store-form-address" class="text-input" placeholder="住所を入力して検索">
+          <button id="store-form-address-search" title="検索して座標を取得"><i class="fa-solid fa-magnifying-glass"></i></button>
+        </div>
+        <button id="store-form-pick-map" class="btn-secondary small"><i class="fa-solid fa-location-crosshairs"></i> 地図で位置を指定</button>
+        <div class="two-col">
+          <div>
+            <label class="opt-label">緯度</label>
+            <input type="text" id="store-form-lat" class="text-input" readonly>
+          </div>
+          <div>
+            <label class="opt-label">経度</label>
+            <input type="text" id="store-form-lon" class="text-input" readonly>
+          </div>
+        </div>
+        <div class="two-col">
+          <div>
+            <label class="opt-label">配布通数</label>
+            <input type="number" id="store-form-count" class="text-input" min="0" step="100" value="0">
+          </div>
+          <div>
+            <label class="opt-label">半径(m)</label>
+            <input type="number" id="store-form-radius" class="text-input" min="100" step="100" value="500">
+          </div>
+        </div>
+        <div class="fw-inline-actions">
+          <button id="store-form-save" class="btn-primary small">保存</button>
+          <button id="store-form-cancel" class="btn-secondary small">キャンセル</button>
+        </div>
+      </div>
+
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th></th><th>店舗名</th><th>配布通数</th><th>半径</th><th>住所</th><th>更新日時</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="store-table-body"></tbody>
+      </table>
+
+      <div class="fw-section-bar">地図への一括描画</div>
+      <div class="two-col">
+        <div>
+          <label class="opt-label">半径(m)</label>
+          <input type="number" id="store-draw-radius" class="text-input" min="100" step="100" value="500">
+        </div>
+        <div style="display:flex;align-items:flex-end;gap:6px;">
+          <button id="store-draw-btn" class="btn-secondary small">選択店舗を描画</button>
+        </div>
+      </div>
+      <button id="store-apply-all-btn" class="btn-secondary small"><i class="fa-solid fa-circle-nodes"></i> 全店舗を反映</button>
+      <label class="segment-option" style="margin-top:8px;">
+        <input type="checkbox" id="store-label-toggle"> ラベル表示
+      </label>
+    </div>
+
+    <div id="store-panel-groups" class="fw-tab-panel hidden">
+      <button id="group-add-btn" class="btn-tool"><i class="fa-solid fa-plus"></i> グループを追加</button>
+
+      <div id="group-form" class="inline-form hidden">
+        <label class="opt-label">グループ名</label>
+        <input type="text" id="group-form-name" class="text-input">
+        <div class="two-col">
+          <div>
+            <label class="opt-label">色</label>
+            <input type="color" id="group-form-color" value="#d81f2a">
+          </div>
+          <div>
+            <label class="opt-label">枠線幅</label>
+            <input type="number" id="group-form-border" class="text-input" min="1" max="10" value="2">
+          </div>
+        </div>
+        <div class="two-col">
+          <div>
+            <label class="opt-label">アイコン</label>
+            <select id="group-form-icon" class="text-input">
+              <option value="fa-shop">店舗</option>
+              <option value="fa-location-dot">ピン</option>
+              <option value="fa-flag">フラグ</option>
+              <option value="fa-star">スター</option>
+            </select>
+          </div>
+          <div>
+            <label class="opt-label">ポイントサイズ</label>
+            <input type="number" id="group-form-size" class="text-input" min="4" max="24" value="8">
+          </div>
+        </div>
+        <label class="segment-option"><input type="checkbox" id="group-form-shared"> 他ユーザーと共有</label>
+        <div class="fw-inline-actions">
+          <button id="group-form-save" class="btn-primary small">保存</button>
+          <button id="group-form-cancel" class="btn-secondary small">キャンセル</button>
+        </div>
+      </div>
+
+      <table class="data-table">
+        <thead><tr><th>色</th><th>グループ名</th><th>共有</th><th></th></tr></thead>
+        <tbody id="group-table-body"></tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<!-- ========== 配達プラン作成ウィザード(新規・中核機能) ========== -->
+<div id="plan-window" class="floating-window plan-window hidden">
+  <div class="fw-header">
+    <span><i class="fa-solid fa-route"></i> 配達プラン作成</span>
+    <span class="fw-header-actions">
+      <i class="fa-solid fa-window-minimize fw-min" id="plan-min" title="最小化"></i>
+      <i class="fa-solid fa-xmark fw-close" id="plan-close" title="閉じる"></i>
+    </span>
+  </div>
+  <div class="fw-body">
+
+    <label class="opt-label">プラン名</label>
+    <input type="text" id="plan-name-input" class="text-input">
+
+    <div class="fw-section-bar">① 作成方法の指定</div>
+    <label class="segment-option"><input type="radio" name="plan-create-method" id="plan-method-new" checked> 新規作成</label>
+    <label class="segment-option"><input type="radio" name="plan-create-method" id="plan-method-copy"> 過去の配達プランから複製</label>
+    <div id="plan-copy-area" class="inline-form hidden">
+      <input type="text" id="plan-copy-search" class="text-input" placeholder="プラン名で検索">
+      <ul id="plan-copy-list" class="search-results"></ul>
+    </div>
+
+    <div class="fw-section-bar">② 商圏作成方法の指定</div>
+    <select id="plan-zone-method" class="text-input">
+      <option value="city">市区町村商圏指定</option>
+      <option value="storeCircle">店舗起点の円商圏</option>
+      <option value="storeTrain">店舗起点の電車商圏</option>
+      <option value="storeTime">店舗起点の所要時間商圏</option>
+      <option value="freePolygon">任意商圏(自由描画)</option>
+      <option value="multiStore">多店舗分析</option>
+    </select>
+    <label class="opt-label">重なり率(%)としきい値 <span class="hint small">(複数商圏が重なる場合の目安)</span></label>
+    <input type="number" id="plan-overlap-rate" class="text-input" min="0" max="100" value="0">
+
+    <div id="plan-zone-city" class="zone-sub hidden">
+      <label class="opt-label">都道府県</label>
+      <select id="plan-pref-select" class="text-input"></select>
+      <label class="opt-label">市区町村(複数選択可)</label>
+      <div id="plan-city-list" class="checklist"></div>
+    </div>
+
+    <div id="plan-zone-storeCircle" class="zone-sub hidden">
+      <label class="opt-label">起点店舗</label>
+      <select id="plan-store-select-circle" class="text-input"></select>
+      <label class="opt-label">半径(m)</label>
+      <input type="number" id="plan-circle-radius" class="text-input" min="100" step="100" value="500">
+    </div>
+
+    <div id="plan-zone-storeTrain" class="zone-sub hidden">
+      <label class="opt-label">起点店舗</label>
+      <select id="plan-store-select-train" class="text-input"></select>
+      <p class="hint small">Overpass APIで最寄り駅を検索し、徒歩圏+概算鉄道到達圏を作成します。</p>
+    </div>
+
+    <div id="plan-zone-storeTime" class="zone-sub hidden">
+      <label class="opt-label">起点店舗</label>
+      <select id="plan-store-select-time" class="text-input"></select>
+      <div class="segmented" id="plan-time-mode">
+        <button data-mode="walk" class="seg-btn active">徒歩</button>
+        <button data-mode="bike" class="seg-btn">自転車</button>
+        <button data-mode="car" class="seg-btn">車</button>
+      </div>
+      <label class="opt-label">所要時間(分)</label>
+      <input type="number" id="plan-time-minutes" class="text-input" min="1" max="60" value="10">
+    </div>
+
+    <div id="plan-zone-freePolygon" class="zone-sub hidden">
+      <button id="plan-free-draw-btn" class="btn-secondary small"><i class="fa-solid fa-draw-polygon"></i> 地図上で商圏を描画</button>
+      <div id="plan-free-status" class="hint small">未描画</div>
+    </div>
+
+    <div id="plan-zone-multiStore" class="zone-sub hidden">
+      <label class="opt-label">対象店舗(複数選択可)</label>
+      <div id="plan-multi-store-list" class="checklist"></div>
+      <label class="opt-label">半径(m)</label>
+      <input type="number" id="plan-multi-radius" class="text-input" min="100" step="100" value="500">
+    </div>
+
+    <div class="fw-section-bar">③ 新聞(配布媒体)の指定</div>
+    <div id="plan-newspaper-list" class="checklist"></div>
+    <label class="opt-label">カバー率(◯%以下)</label>
+    <input type="number" id="plan-coverage-rate" class="text-input" min="0" max="100" value="100">
+    <p class="hint small">新聞購読データ等の実データが提供された場合のみ有効な任意機能です。現在はデモ選択のみで結果には反映されません。</p>
+
+    <div class="fw-section-bar">④ 指標の指定</div>
+    <div id="plan-indicator-tree" class="indicator-tree"></div>
+    <div class="indicator-selected-header">
+      <span>選択された指標</span>
+      <span>
+        <button id="plan-indicator-down" class="icon-btn small" title="下へ"><i class="fa-solid fa-arrow-down"></i></button>
+        <button id="plan-indicator-up" class="icon-btn small" title="上へ"><i class="fa-solid fa-arrow-up"></i></button>
+      </span>
+    </div>
+    <div id="plan-indicator-selected" class="indicator-selected-box"></div>
+
+    <div class="fw-section-bar">⑤ 予算通数の指定</div>
+    <label class="opt-label">予算通数を指定してください。</label>
+    <div class="two-col">
+      <input type="number" id="plan-budget-count" class="text-input" min="0" step="100" value="10000">
+      <label class="segment-option"><input type="checkbox" id="plan-select-all-towns"> 全町丁目を選択</label>
+    </div>
+    <p class="hint small">配達見込世帯数はあくまで目安です。必ずこの通数を配達できることを保証するものではありません。</p>
+
+    <div class="budget-row">
+      <label class="segment-option">
+        <input type="radio" name="plan-budget-mode" id="plan-budget-mode-estimate" checked> 配達見込世帯数
+      </label>
+      <span id="plan-budget-estimate-households" class="budget-value">0 世帯</span>
+      <label class="segment-option small-check">
+        <input type="checkbox" id="plan-exclude-zero" checked> 配達見込世帯数がゼロのものを除外
+      </label>
+    </div>
+    <div class="budget-row">
+      <label class="segment-option">
+        <input type="radio" name="plan-budget-mode" id="plan-budget-mode-statistical"> 統計上配込世帯数
+      </label>
+      <span id="plan-budget-statistical-households" class="budget-value">0 世帯</span>
+      <span class="opt-label" style="margin:0 4px;">掛け率</span>
+      <input type="number" id="plan-budget-multiplier" class="text-input small-num" min="0" max="200" value="70">
+      <span>%</span>
+    </div>
+    <div class="budget-row">
+      <span class="opt-label" style="margin:0;">統計上世帯数</span>
+      <span id="plan-budget-base-households" class="budget-value">0 世帯</span>
+      <span class="opt-label" style="margin:0 0 0 16px;">町丁目数</span>
+      <span id="plan-budget-town-count" class="budget-value">0</span>
+    </div>
+
+    <!-- 明細パネル -->
+    <div id="plan-detail-panel" class="hidden">
+      <div class="fw-section-bar">明細</div>
+      <div class="detail-table-wrap">
+        <table class="data-table">
+          <thead><tr><th>町丁目</th><th>世帯数</th><th>統計上世帯数</th><th>指標値</th></tr></thead>
+          <tbody id="plan-detail-table-body"></tbody>
+        </table>
+      </div>
+      <button id="plan-detail-csv-btn" class="btn-secondary small"><i class="fa-solid fa-file-csv"></i> 明細をCSV出力</button>
+    </div>
+
+  </div>
+  <div class="fw-actions">
+    <button id="plan-reverse-btn" class="btn-secondary small">逆引き分析</button>
+    <button id="plan-detail-btn" class="btn-secondary small">明細</button>
+    <button id="plan-map-select-btn" class="btn-secondary small">地図選択</button>
+    <button id="plan-analyze-btn" class="btn-primary small">分析開始</button>
+    <button id="plan-save-btn" class="btn-secondary small">保存</button>
+    <button id="plan-report-btn" class="btn-secondary small">レポート出力</button>
+    <button id="plan-cancel-btn" class="btn-text small">キャンセル</button>
+  </div>
+</div>
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 
 <script src="data/sample_stats.js"></script>
+<script src="data/newspapers.js"></script>
 <script src="js/config.js"></script>
 <script src="js/dataStore.js"></script>
 <script src="js/boundaryLoader.js"></script>
+<script src="js/shapeBuilders.js"></script>
 <script src="js/map.js"></script>
 <script src="js/panel.js"></script>
+<script src="js/storeManager.js"></script>
+<script src="js/deliveryPlan.js"></script>
 <script src="js/report.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>
+</content>

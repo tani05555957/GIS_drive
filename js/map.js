@@ -22,16 +22,30 @@ const AppMap = (() => {
   let timeLayer = null;
   let timeShapeGeoJson = null; // 所要時間モードの実ジオメトリ(交差判定用)
 
+  let trainOrigin = null;
+  let trainLayer = null;
+  let trainShapeGeoJson = null; // 電車商圏モードの実ジオメトリ(交差判定用)
+
   // --- 町丁目・字境界レイヤー ---
   let boundaryLayerGroup = null;
   let boundaryLayersByKey = new Map(); // KEY_CODE -> Leaflet layer
   let renderedFeatures = [];
   let selectedAreaKeyCodes = new Set(); // 「地域」モードでの選択
 
+  // --- 店舗管理・配達プランウィザード用の補助レイヤー ---
+  let storeMarkersLayer = null;
+  let storeCirclesLayer = null;
+  let planShapeLayer = null;
+  let oneShotClickHandler = null;
+
   // --- 簡易 pub/sub ---
   const listeners = {};
   function on(evt, fn) {
     (listeners[evt] = listeners[evt] || []).push(fn);
+  }
+  function off(evt, fn) {
+    if (!listeners[evt]) return;
+    listeners[evt] = listeners[evt].filter((f) => f !== fn);
   }
   function emit(evt, payload) {
     (listeners[evt] || []).forEach((fn) => fn(payload));
@@ -64,7 +78,13 @@ const AppMap = (() => {
     map.on("dblclick", onDoubleClickFinishPolygon);
 
     boundaryLayerGroup = L.layerGroup().addTo(map);
+    storeCirclesLayer = L.layerGroup().addTo(map);
+    storeMarkersLayer = L.layerGroup().addTo(map);
 
+    return map;
+  }
+
+  function getMap() {
     return map;
   }
 
@@ -118,6 +138,10 @@ const AppMap = (() => {
     timeOrigin = null;
     timeShapeGeoJson = null;
 
+    if (trainLayer) { map.removeLayer(trainLayer); trainLayer = null; }
+    trainOrigin = null;
+    trainShapeGeoJson = null;
+
     selectedAreaKeyCodes.clear();
 
     emit("shapeCleared");
@@ -169,6 +193,9 @@ const AppMap = (() => {
     } else if (mode === "time") {
       timeOrigin = e.latlng;
       emit("timeOriginSet");
+    } else if (mode === "train") {
+      trainOrigin = e.latlng;
+      buildTrainShape();
     }
   }
 
@@ -200,47 +227,34 @@ const AppMap = (() => {
   async function buildTimeShape(apiKey = "", travelMode = "walk", minutes = 10) {
     if (!timeOrigin) return;
     if (timeLayer) { map.removeLayer(timeLayer); timeLayer = null; }
-    timeShapeGeoJson = null;
-
-    let usedApi = false;
-    if (apiKey) {
-      try {
-        const profile = { walk: "foot-walking", bike: "cycling-regular", car: "driving-car" }[travelMode] || "foot-walking";
-        const res = await fetch(`https://api.openrouteservice.org/v2/isochrones/${profile}`, {
-          method: "POST",
-          headers: { Authorization: apiKey, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            locations: [[timeOrigin.lng, timeOrigin.lat]],
-            range: [minutes * 60],
-            range_type: "time",
-          }),
-        });
-        if (res.ok) {
-          const gj = await res.json();
-          if (gj.features && gj.features.length > 0) {
-            timeShapeGeoJson = gj.features[0];
-            timeLayer = L.geoJSON(gj, { style: { color: "#e37400", weight: 2, fillOpacity: 0.15 } }).addTo(map);
-            usedApi = true;
-          }
-        }
-      } catch (err) {
-        console.warn("ORS isochrone取得に失敗、近似円で代替します", err);
-      }
-    }
-
-    if (!usedApi) {
-      const speed = TRAVEL_SPEED_KMH[travelMode] || TRAVEL_SPEED_KMH.walk;
-      const radiusM = (speed * 1000 * minutes) / 60;
-      timeShapeGeoJson = turf.circle([timeOrigin.lng, timeOrigin.lat], radiusM / 1000, { steps: 64, units: "kilometers" });
-      timeLayer = L.circle(timeOrigin, {
-        radius: radiusM,
-        color: "#e37400",
-        weight: 2,
-        dashArray: "6,4",
-        fillOpacity: 0.12,
-      }).addTo(map);
-    }
+    timeShapeGeoJson = await ShapeBuilders.time({
+      lat: timeOrigin.lat,
+      lon: timeOrigin.lng,
+      mode: travelMode,
+      minutes,
+      apiKey,
+    });
+    const approx = !!timeShapeGeoJson.properties?.approx;
+    timeLayer = L.geoJSON(timeShapeGeoJson, {
+      style: { color: "#e37400", weight: 2, dashArray: approx ? "6,4" : null, fillOpacity: 0.15 },
+    }).addTo(map);
     emit("shapeUpdated", getCurrentShapeInfo());
+  }
+
+  /** 電車商圏モード: Overpassで最寄り駅を検索し、徒歩圏+概算鉄道到達圏を描画する */
+  async function buildTrainShape() {
+    if (!trainOrigin) return;
+    if (trainLayer) { map.removeLayer(trainLayer); trainLayer = null; }
+    trainShapeGeoJson = null;
+    emit("trainLoading");
+
+    const gj = await ShapeBuilders.train({ lat: trainOrigin.lat, lon: trainOrigin.lng });
+    trainShapeGeoJson = gj;
+    trainLayer = L.geoJSON(gj, {
+      style: { color: "#8e44ad", weight: 2, dashArray: gj.properties?.fallback ? "6,4" : null, fillOpacity: 0.15 },
+    }).addTo(map);
+    emit("shapeUpdated", getCurrentShapeInfo());
+    emit("trainShapeReady", gj.properties);
   }
 
   // ---------------- 町丁目・字境界レイヤー ----------------
@@ -306,6 +320,9 @@ const AppMap = (() => {
     if (mode === "time" && timeShapeGeoJson) {
       return { mode, geojson: timeShapeGeoJson };
     }
+    if (mode === "train" && trainShapeGeoJson) {
+      return { mode, geojson: trainShapeGeoJson };
+    }
     if (mode === "area") {
       return { mode, selectedKeyCodes: Array.from(selectedAreaKeyCodes) };
     }
@@ -318,9 +335,70 @@ const AppMap = (() => {
     return !!info.geojson;
   }
 
+  // ---------------- 店舗管理レイヤー(新規) ----------------
+  /** 登録店舗のマーカーを描画する。groupsById: Map<groupId, Group> */
+  function renderStoreMarkers(stores, groupsById, opts = {}) {
+    storeMarkersLayer.clearLayers();
+    const showLabels = !!opts.showLabels;
+    stores.forEach((s) => {
+      const g = groupsById.get(s.groupId);
+      const color = g?.color || "#d81f2a";
+      const marker = L.circleMarker([s.lat, s.lon], {
+        radius: g?.pointSize || 8,
+        color: "#fff",
+        weight: g?.borderWidth ?? 2,
+        fillColor: color,
+        fillOpacity: 1,
+      });
+      marker.bindTooltip(s.name, showLabels ? { permanent: true, direction: "top", className: "store-label" } : { sticky: true });
+      marker.addTo(storeMarkersLayer);
+    });
+  }
+
+  /** 登録店舗を中心とした円商圏をまとめて描画する */
+  function renderStoreCircles(stores, groupsById, opts = {}) {
+    storeCirclesLayer.clearLayers();
+    stores.forEach((s) => {
+      const g = groupsById.get(s.groupId);
+      const color = g?.color || "#d81f2a";
+      const radius = opts.radiusOverride ?? s.radius ?? 500;
+      L.circle([s.lat, s.lon], { radius, color, weight: g?.borderWidth ?? 2, fillOpacity: 0.1 }).addTo(storeCirclesLayer);
+    });
+  }
+
+  function clearStoreLayers() {
+    storeMarkersLayer.clearLayers();
+    storeCirclesLayer.clearLayers();
+  }
+
+  /** 次の1回だけの地図クリックを取得する(店舗の位置指定などに利用、既存の商圏モードとは独立) */
+  function enableOneShotPlacement(cb) {
+    if (oneShotClickHandler) map.off("click", oneShotClickHandler);
+    oneShotClickHandler = (e) => {
+      oneShotClickHandler = null;
+      cb(e.latlng);
+    };
+    map.once("click", oneShotClickHandler);
+  }
+
+  // ---------------- 配達プランウィザード用の図形オーバーレイ(新規) ----------------
+  function renderPlanShape(geojson) {
+    clearPlanShape();
+    if (!geojson) return;
+    planShapeLayer = L.geoJSON(geojson, {
+      style: { color: "#8e44ad", weight: 2, dashArray: "4,4", fillOpacity: 0.06 },
+    }).addTo(map);
+  }
+
+  function clearPlanShape() {
+    if (planShapeLayer) { map.removeLayer(planShapeLayer); planShapeLayer = null; }
+  }
+
   return {
     init,
+    getMap,
     on,
+    off,
     geocodeSearch,
     flyTo,
     getMapBoundsBbox,
@@ -332,10 +410,17 @@ const AppMap = (() => {
     undoPolygonPoint,
     onDoubleClickFinishPolygon,
     buildTimeShape,
+    buildTrainShape,
     renderBoundaryFeatures,
     getBoundaryFeatures,
     applyBoundaryColors,
     getCurrentShapeInfo,
     isShapeReady,
+    renderStoreMarkers,
+    renderStoreCircles,
+    clearStoreLayers,
+    enableOneShotPlacement,
+    renderPlanShape,
+    clearPlanShape,
   };
 })();

@@ -4,6 +4,8 @@
 document.addEventListener("DOMContentLoaded", () => {
   AppMap.init("map");
   Panel.init();
+  StoreManager.init();
+  DeliveryPlan.init();
 
   // 初期表示: サンプル属性データ(千代田区の実KEY_CODEベース)を読み込み
   DataStore.loadSegmentTable(SAMPLE_SEGMENT_TABLE);
@@ -14,6 +16,10 @@ document.addEventListener("DOMContentLoaded", () => {
   Panel.onSelectionsChanged(() => recompute());
   Panel.wireReportButton(() => Report.captureAndDownload());
   Panel.wireReset();
+
+  document.getElementById("header-home-btn").addEventListener("click", () => {
+    AppMap.flyTo(35.681236, 139.767125, 15);
+  });
 
   let boundaryRequestId = 0;
 

@@ -83,5 +83,28 @@ const BoundaryLoader = (() => {
     return { features: filtered, tooBroad: false, candidateCount: result.candidateCount };
   }
 
-  return { loadIndex, getFeaturesInBbox, getFeaturesIntersectingShape };
+  /**
+   * 配達プランウィザードの「市区町村商圏指定」用。明示的に指定された市区町村コードの
+   * featureを bbox 判定・上限件数を経由せず直接取得する(ユーザーが意図的に選んだ範囲のため)。
+   */
+  async function getFeaturesForMunicipalities(codes) {
+    await loadIndex();
+    const codeSet = new Set(codes);
+    const entries = index.filter((e) => codeSet.has(e.code));
+    const groups = await Promise.all(entries.map(loadMunicipality));
+    return groups.flat();
+  }
+
+  /** ロード済みの市区町村インデックス(pref/prefName/code/name/bbox)を返す。事前に loadIndex() が必要 */
+  function getMunicipalityIndex() {
+    return index;
+  }
+
+  return {
+    loadIndex,
+    getFeaturesInBbox,
+    getFeaturesIntersectingShape,
+    getFeaturesForMunicipalities,
+    getMunicipalityIndex,
+  };
 })();

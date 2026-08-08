@@ -88,3 +88,66 @@ const TRAVEL_SPEED_KMH = {
 
 /** ランク(色分け)段階数と配色 */
 const RANK_COLORS = ["#e8f0fe", "#aecbfa", "#669df6", "#4285f4", "#1a56d6"];
+
+/**
+ * 配達プラン作成ウィザード「指標の指定」で選択できる統計情報ツリー。
+ * categoryKey は DataStore.getIndicatorValue の第2引数(segments.* のキー、または特別扱いの "census")と対応。
+ * provided:false のカテゴリは data/sample_stats.js に対応する実データが無いため、
+ * 明細では「データ未提供」と表示される(仕様書 111〜117行目の拡張候補に対応するデモ項目)。
+ */
+const STAT_INDICATOR_TREE = [
+  {
+    key: "census",
+    label: "国勢調査",
+    provided: true,
+    leaves: [
+      { key: "population", label: "人口総数" },
+      { key: "households", label: "世帯数" },
+    ],
+  },
+  {
+    key: "sexage",
+    label: "推計1歳刻み人口(性別・年代)",
+    provided: true,
+    leaves: SEGMENT_CONFIG.find((c) => c.key === "sexage").options,
+  },
+  {
+    key: "income",
+    label: "推計年収別世帯数",
+    provided: true,
+    leaves: SEGMENT_CONFIG.find((c) => c.key === "income").options,
+  },
+  {
+    key: "consumption",
+    label: "推計家計消費",
+    provided: false,
+    leaves: [
+      { key: "food", label: "食料" },
+      { key: "housing_cost", label: "住居費" },
+      { key: "utilities", label: "光熱・水道" },
+      { key: "other", label: "その他消費" },
+    ],
+  },
+  {
+    key: "purchase_intent",
+    label: "新購買志向",
+    provided: false,
+    leaves: [
+      { key: "trend", label: "トレンド志向" },
+      { key: "value", label: "価格重視" },
+      { key: "quality", label: "品質重視" },
+      { key: "eco", label: "エコ志向" },
+    ],
+  },
+  {
+    key: "car_ownership",
+    label: "自動車カテゴリ・メーカー車種・軽自動車メーカー",
+    provided: false,
+    leaves: [
+      { key: "kei", label: "軽自動車" },
+      { key: "compact", label: "コンパクト" },
+      { key: "sedan", label: "セダン" },
+      { key: "suv", label: "SUV・ミニバン" },
+    ],
+  },
+];

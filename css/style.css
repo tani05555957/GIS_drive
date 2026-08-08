@@ -1,11 +1,14 @@
 :root {
-  --primary: #1a73e8;
-  --primary-dark: #0d5bba;
+  --primary: #d81f2a;
+  --primary-dark: #a8151e;
+  --primary-light: #f4c9cc;
+  --accent-blue: #1a73e8;
   --panel-bg: #f7f8fa;
   --border: #dfe3e8;
   --text: #202124;
   --text-muted: #5f6368;
   --danger: #d93025;
+  --header-h: 56px;
 }
 
 * { box-sizing: border-box; }
@@ -18,9 +21,53 @@ html, body {
   color: var(--text);
 }
 
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- 上部ヘッダー ---------- */
+#app-header {
+  flex: 0 0 var(--header-h);
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: linear-gradient(180deg, var(--primary) 0%, var(--primary-dark) 100%);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(0,0,0,.18);
+  z-index: 500;
+}
+.app-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.app-logo-icon { font-size: 24px; }
+.app-header-titles { display: flex; flex-direction: column; line-height: 1.2; }
+.app-title { font-size: 16px; font-weight: 700; letter-spacing: .02em; }
+.app-subtitle { font-size: 11px; color: rgba(255,255,255,.85); }
+.app-header-right { display: flex; align-items: center; gap: 8px; }
+.header-icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255,255,255,.16);
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.header-icon-btn:hover { background: rgba(255,255,255,.32); }
+
 #app {
   display: flex;
-  height: 100vh;
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100vw;
   overflow: hidden;
 }
@@ -124,7 +171,7 @@ html, body {
 /* ---------- 形状選択 ---------- */
 .shape-select {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 6px;
 }
 .shape-btn {
@@ -362,3 +409,299 @@ input[type="range"] { width: 100%; }
 /* scrollbar */
 .panel-body::-webkit-scrollbar { width: 8px; }
 .panel-body::-webkit-scrollbar-thumb { background: #c7ccd1; border-radius: 4px; }
+
+/* ---------- 業務ツールボタン ---------- */
+.btn-tool {
+  width: 100%;
+  padding: 9px;
+  background: #fff;
+  color: var(--primary);
+  border: 1px solid var(--primary-light);
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.btn-tool:first-child { margin-top: 0; }
+.btn-tool:hover { background: var(--primary); color: #fff; }
+
+.icon-btn {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 4px 8px;
+  color: var(--text);
+}
+.icon-btn:hover { border-color: var(--primary); color: var(--primary); }
+.icon-btn.small { font-size: 11px; padding: 3px 7px; }
+
+/* ---------- フローティングウィンドウ(店舗管理・配達プラン) ---------- */
+.floating-window {
+  position: absolute;
+  top: calc(var(--header-h) + 24px);
+  left: 360px;
+  width: 420px;
+  max-width: calc(100vw - 380px);
+  max-height: calc(100vh - var(--header-h) - 48px);
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.28);
+  display: flex;
+  flex-direction: column;
+  z-index: 2000;
+  overflow: hidden;
+}
+.floating-window.hidden { display: none; }
+.floating-window.minimized .fw-tabs,
+.floating-window.minimized .fw-body,
+.floating-window.minimized .fw-actions {
+  display: none;
+}
+
+.plan-window { width: 480px; left: 380px; }
+
+.fw-header {
+  background: linear-gradient(180deg, var(--primary) 0%, var(--primary-dark) 100%);
+  color: #fff;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+  cursor: default;
+}
+.fw-header-actions { display: flex; align-items: center; gap: 14px; }
+.fw-header-actions i { cursor: pointer; font-size: 13px; }
+.fw-header-actions i:hover { opacity: .75; }
+
+.fw-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.fw-tab {
+  flex: 1;
+  padding: 9px;
+  border: none;
+  background: #f2f3f5;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.fw-tab.active { background: #fff; color: var(--primary); border-bottom-color: var(--primary); }
+
+.fw-body {
+  padding: 14px;
+  overflow-y: auto;
+  flex: 1;
+}
+.fw-tab-panel.hidden { display: none; }
+
+.fw-section-bar {
+  background: var(--primary);
+  color: #fff;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 4px;
+  margin: 14px 0 8px;
+}
+.fw-section-bar:first-child { margin-top: 0; }
+
+.fw-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  background: #fafafa;
+}
+.fw-actions button { flex: 1 1 auto; min-width: 70px; margin-top: 0; }
+
+.fw-inline-actions { display: flex; gap: 6px; margin-top: 10px; }
+.fw-inline-actions button { flex: 1; }
+
+.inline-form {
+  margin-top: 10px;
+  padding: 10px;
+  background: #f7f8fa;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.inline-form.hidden { display: none; }
+
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.btn-primary.small, .btn-secondary.small, .btn-text.small {
+  width: auto;
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+/* ---------- データテーブル(店舗一覧・明細) ---------- */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+  margin-top: 8px;
+}
+.data-table th, .data-table td {
+  padding: 6px 6px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+.data-table th { color: var(--text-muted); font-weight: 700; background: #f7f8fa; position: sticky; top: 0; }
+.data-table td.actions { display: flex; gap: 6px; white-space: nowrap; }
+.data-table td.actions i { cursor: pointer; color: var(--text-muted); }
+.data-table td.actions i:hover { color: var(--primary); }
+.detail-table-wrap { max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
+
+/* ---------- チェックリスト(市区町村・新聞・店舗選択) ---------- */
+.checklist {
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: #fff;
+  margin-bottom: 8px;
+}
+.checklist label {
+  display: block;
+  font-size: 12px;
+  padding: 3px 0;
+}
+
+.zone-sub {
+  margin-top: 8px;
+  padding: 10px;
+  background: #f7f8fa;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.zone-sub.hidden { display: none; }
+
+.small-check { font-size: 11px; }
+
+/* ---------- 指標ツリー(配達プラン) ---------- */
+.indicator-tree {
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  margin-bottom: 6px;
+}
+.indicator-cat-header {
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #eef1f5;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.indicator-cat-header .not-provided-badge {
+  font-size: 9px;
+  font-weight: 400;
+  color: var(--text-muted);
+  background: #e4e6ea;
+  padding: 1px 5px;
+  border-radius: 8px;
+}
+.indicator-leaf-list { padding: 2px 8px 6px; }
+.indicator-leaf-list.collapsed { display: none; }
+.indicator-leaf-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11.5px;
+  padding: 3px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.indicator-leaf-row:hover { background: #f2f6fe; }
+.indicator-leaf-row i { color: var(--primary); }
+
+.indicator-selected-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+}
+.indicator-selected-box {
+  min-height: 90px;
+  max-height: 150px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  padding: 4px;
+}
+.indicator-selected-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.indicator-selected-row:hover { background: #f7f8fa; }
+.indicator-selected-row.active { background: var(--primary-light); }
+.indicator-selected-row i { color: var(--text-muted); cursor: pointer; }
+.indicator-selected-row i:hover { color: var(--danger); }
+
+/* ---------- 予算通数(配達プラン) ---------- */
+.budget-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--border);
+  font-size: 12px;
+}
+.budget-row:last-child { border-bottom: none; }
+.budget-value { font-weight: 700; color: var(--primary); min-width: 64px; }
+.small-num { width: 70px; flex: 0 0 auto; }
+
+/* ---------- 店舗ラベル ---------- */
+.store-label {
+  background: #fff;
+  border: 1px solid var(--primary);
+  color: var(--primary);
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+@media (max-width: 900px) {
+  .floating-window, .plan-window {
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-width: none;
+  }
+}
