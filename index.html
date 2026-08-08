@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>商圏分析マップ (OSM / Leaflet)</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ========== 左サイドパネル ========== -->
+  <aside id="side-panel">
+    <header class="panel-header">
+      <i class="fa-solid fa-map-location-dot"></i>
+      <span>商圏設定</span>
+    </header>
+
+    <div class="panel-body">
+
+      <!-- 検索 -->
+      <section class="panel-section">
+        <label class="section-title">地点検索</label>
+        <div class="search-box">
+          <input id="search-input" type="text" placeholder="住所・駅・ランドマークを入力" autocomplete="off">
+          <button id="search-btn" title="検索"><i class="fa-solid fa-magnifying-glass"></i></button>
+        </div>
+        <ul id="search-results" class="search-results hidden"></ul>
+      </section>
+
+      <!-- 商圏の指定方法 -->
+      <section class="panel-section">
+        <label class="section-title">商圏の指定方法</label>
+        <div class="shape-select" id="shape-select">
+          <button class="shape-btn" data-shape="circle"><i class="fa-regular fa-circle"></i><span>円形</span></button>
+          <button class="shape-btn" data-shape="polygon"><i class="fa-solid fa-draw-polygon"></i><span>多角形</span></button>
+          <button class="shape-btn" data-shape="time"><i class="fa-regular fa-clock"></i><span>所要時間</span></button>
+          <button class="shape-btn" data-shape="area"><i class="fa-solid fa-map"></i><span>地域</span></button>
+        </div>
+
+        <!-- 円形オプション -->
+        <div class="shape-options hidden" id="opt-circle">
+          <label class="opt-label">半径: <span id="circle-radius-val">500</span> m</label>
+          <input type="range" id="circle-radius" min="100" max="5000" step="100" value="500">
+          <p class="hint">地図をクリックして中心を指定してください。</p>
+        </div>
+
+        <!-- 多角形オプション -->
+        <div class="shape-options hidden" id="opt-polygon">
+          <p class="hint">地図上をクリックして頂点を追加し、始点付近をクリックまたはダブルクリックで確定します。</p>
+          <button id="polygon-undo" class="btn-secondary small"><i class="fa-solid fa-rotate-left"></i> 一つ戻す</button>
+        </div>
+
+        <!-- 所要時間オプション -->
+        <div class="shape-options hidden" id="opt-time">
+          <label class="opt-label">移動手段</label>
+          <div class="segmented" id="time-mode">
+            <button data-mode="walk" class="seg-btn active"><i class="fa-solid fa-person-walking"></i> 徒歩</button>
+            <button data-mode="bike" class="seg-btn"><i class="fa-solid fa-person-biking"></i> 自転車</button>
+            <button data-mode="car" class="seg-btn"><i class="fa-solid fa-car"></i> 車</button>
+          </div>
+          <label class="opt-label">所要時間: <span id="time-minutes-val">10</span> 分</label>
+          <input type="range" id="time-minutes" min="1" max="60" step="1" value="10">
+          <label class="opt-label">ORS APIキー(任意・道路network等時間圏)</label>
+          <input type="text" id="ors-api-key" class="text-input" placeholder="未入力の場合は直線距離による近似円">
+          <p class="hint">地図をクリックして起点を指定してください。</p>
+        </div>
+
+        <!-- 地域オプション -->
+        <div class="shape-options hidden" id="opt-area">
+          <p class="hint">表示されている町丁目・字の境界をクリックして選択(複数選択可)します。範囲が広すぎる場合は地図を拡大してください。</p>
+          <button id="area-clear" class="btn-secondary small"><i class="fa-solid fa-eraser"></i> 選択解除</button>
+        </div>
+      </section>
+
+      <!-- 町丁目境界の読み込み状況 -->
+      <section class="panel-section">
+        <div id="boundary-status" class="hint"></div>
+      </section>
+
+      <!-- 条件を選択 -->
+      <section class="panel-section">
+        <button id="condition-btn" class="btn-primary" disabled>
+          <i class="fa-solid fa-sliders"></i> 条件を選択
+        </button>
+      </section>
+
+      <!-- セグメント条件パネル -->
+      <section class="panel-section hidden" id="segment-panel">
+        <label class="section-title">属性条件(世帯セグメント)</label>
+        <p class="hint small">条件を選択すると、カテゴリ内選択肢の割合から推定件数を算出します(独立仮定に基づく概算)。</p>
+        <div id="segment-groups"></div>
+      </section>
+
+      <!-- 集計結果 -->
+      <section class="panel-section" id="result-section">
+        <label class="section-title">集計結果</label>
+        <div class="result-box">
+          <div class="result-row"><span>対象エリア数</span><strong id="result-areas">0</strong></div>
+          <div class="result-row"><span>世帯数(概算)</span><strong id="result-households">0</strong></div>
+          <div class="result-row"><span>人口(概算)</span><strong id="result-population">0</strong></div>
+        </div>
+        <div id="rank-legend" class="rank-legend hidden"></div>
+      </section>
+
+      <!-- データ / レポート -->
+      <section class="panel-section">
+        <label class="section-title">属性データ(世帯セグメント)</label>
+        <label class="btn-secondary file-btn">
+          <i class="fa-solid fa-file-import"></i> 属性データ読み込み(JSON)
+          <input type="file" id="stats-file" accept=".json" class="hidden-file">
+        </label>
+        <div id="stats-status" class="hint">未読み込み(千代田区周辺のサンプルデータ表示中)</div>
+        <p class="hint small">町丁目の境界・世帯数は boundaries/ の実データを自動で使用します。ここで読み込むのは KEY_CODE に対応した属性内訳(性別年代・年収など)のみです。</p>
+      </section>
+
+      <section class="panel-section">
+        <label class="section-title">レポート出力</label>
+        <button id="report-btn" class="btn-secondary"><i class="fa-solid fa-download"></i> 画面をレポート画像として保存</button>
+      </section>
+
+      <section class="panel-section">
+        <button id="reset-btn" class="btn-text"><i class="fa-solid fa-rotate-left"></i> すべてリセット</button>
+      </section>
+
+    </div>
+  </aside>
+
+  <!-- ========== マップエリア ========== -->
+  <main id="map-area">
+    <div id="map"></div>
+    <div id="map-loading" class="hidden">
+      <i class="fa-solid fa-spinner fa-spin"></i>
+    </div>
+  </main>
+
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+
+<script src="data/sample_stats.js"></script>
+<script src="js/config.js"></script>
+<script src="js/dataStore.js"></script>
+<script src="js/boundaryLoader.js"></script>
+<script src="js/map.js"></script>
+<script src="js/panel.js"></script>
+<script src="js/report.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
