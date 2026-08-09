@@ -62,6 +62,8 @@ const Panel = (() => {
       resultHouseholds: document.getElementById("result-households"),
       resultPopulation: document.getElementById("result-population"),
       rankLegend: document.getElementById("rank-legend"),
+      fillOpacity: document.getElementById("fill-opacity"),
+      fillOpacityVal: document.getElementById("fill-opacity-val"),
 
       statsFile: document.getElementById("stats-file"),
       statsStatus: document.getElementById("stats-status"),
@@ -79,6 +81,16 @@ const Panel = (() => {
     wirePolygonOptions();
     wireMultiStoreOptions();
     wireConditionToggle();
+    wireOpacitySlider();
+  }
+
+  // ---------------- 透明度スライダー ----------------
+  function wireOpacitySlider() {
+    els.fillOpacity.addEventListener("input", () => {
+      const pct = Number(els.fillOpacity.value);
+      els.fillOpacityVal.textContent = `${pct}%`;
+      AppMap.setFillOpacity(pct / 100);
+    });
   }
 
   // ---------------- 商圏作成方法ボタン ----------------
@@ -414,21 +426,30 @@ const Panel = (() => {
     els.rankLegend.classList.remove("hidden");
   }
 
-  /** 2軸(バイバリエート)のランク別色分け凡例を3×3グリッドで表示する */
-  function updateBivariateLegend(catALabel, catBLabel, colors) {
-    const cells = [];
+  /** 2軸(バイバリエート/クロス表示)のランク別色分け凡例を3×3の円グラフ風グリッドで表示する */
+  function updateBivariateLegend(catALabel, catBLabel, colors, cellPercent) {
+    const rows = [];
     for (let a = 2; a >= 0; a--) {
+      const cells = [];
       for (let b = 0; b < 3; b++) {
-        cells.push(`<span class="bivar-cell" style="background:${colors[a][b]}"></span>`);
+        const pct = cellPercent ? cellPercent[a][b] : 0;
+        const size = Math.round(Math.max(24, Math.min(50, 22 + pct * 0.85)));
+        cells.push(
+          `<div class="bivar-cell"><span class="bivar-circle" style="width:${size}px;height:${size}px;background:${colors[a][b]}">${pct.toFixed(0)}%</span></div>`
+        );
       }
+      rows.push(`<div class="bivar-row">${cells.join("")}</div>`);
     }
     els.rankLegend.innerHTML = `
-      <div style="font-weight:700;margin-bottom:6px;">2軸バイバリエート色分け</div>
+      <div style="font-weight:700;margin-bottom:6px;">2軸ランキング(クロス表示)</div>
       <div class="bivar-legend">
-        <div class="bivar-grid">${cells.join("")}</div>
-        <div class="bivar-axis-a">${escapeHtml(catALabel)} 高<i class="fa-solid fa-arrow-up"></i></div>
+        <div class="bivar-rowlabel">${escapeHtml(catALabel)}<i class="fa-solid fa-arrow-up"></i></div>
+        <div class="bivar-main">
+          <div class="bivar-grid">${rows.join("")}</div>
+          <div class="bivar-collabel">${escapeHtml(catBLabel)}<i class="fa-solid fa-arrow-right"></i></div>
+        </div>
       </div>
-      <div class="bivar-axis-b">${escapeHtml(catBLabel)} 高<i class="fa-solid fa-arrow-right"></i></div>
+      <p class="hint small" style="margin-top:8px;">円の大きさ・数値は、表示中の商圏における統計上世帯数ベースの構成比(%)です。</p>
     `;
     els.rankLegend.classList.remove("hidden");
   }

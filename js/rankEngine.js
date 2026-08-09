@@ -63,6 +63,13 @@ const RankEngine = (() => {
       const { rankOf: rankOfB } = DataStore.classifyByQuantile(valueMapB, 3);
 
       const colorByKeyCode = new Map();
+      // セル(軸A段階×軸B段階)ごとの統計上世帯数の合計 → 商圏内世帯数に占める割合(%)を求める
+      const cellWeight = [
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0],
+      ];
+      let totalWeight = 0;
       features.forEach((f) => {
         const key = f.properties?.KEY_CODE;
         if (!key || !valueMapA.has(key) || !valueMapB.has(key)) return;
@@ -70,12 +77,17 @@ const RankEngine = (() => {
         const rB = rankOfB(valueMapB.get(key));
         if (rA < 0 || rB < 0) return;
         colorByKeyCode.set(key, BIVARIATE_COLORS[rA][rB]);
+
+        const weight = StatsData.getRecord(key)?.statHouseholds || 0;
+        cellWeight[rA][rB] += weight;
+        totalWeight += weight;
       });
+      const cellPercent = cellWeight.map((row) => row.map((w) => (totalWeight ? (w / totalWeight) * 100 : 0)));
 
       return {
         mode: "bivariate",
         colorByKeyCode,
-        legend: { catALabel: catA.label, catBLabel: catB.label, colors: BIVARIATE_COLORS },
+        legend: { catALabel: catA.label, catBLabel: catB.label, colors: BIVARIATE_COLORS, cellPercent },
       };
     }
 

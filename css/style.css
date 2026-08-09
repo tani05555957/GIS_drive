@@ -351,6 +351,17 @@ input[type="range"] { width: 100%; }
 }
 .result-row strong { color: var(--primary); }
 
+.opacity-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.opacity-row input[type="range"] { flex: 1; }
+.opacity-label { color: var(--text-muted); flex-shrink: 0; }
+.opacity-val { color: var(--primary); font-weight: 700; min-width: 34px; text-align: right; flex-shrink: 0; }
+
 .rank-legend {
   margin-top: 8px;
   background: #fff;
@@ -405,28 +416,62 @@ input[type="range"] { width: 100%; }
 .zone-summary-delta.up { color: #1a7f37; background: #dcf5e3; }
 .zone-summary-delta.down { color: #c0341f; background: #fbe0dc; }
 
-/* ---------- 2軸バイバリエート凡例 ---------- */
+/* ---------- 2軸バイバリエート(クロス表示)凡例 ---------- */
 .bivar-legend {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
-.bivar-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 16px);
-  grid-template-rows: repeat(3, 16px);
-  gap: 2px;
-}
-.bivar-cell { border-radius: 2px; }
-.bivar-axis-a {
+.bivar-rowlabel {
   font-size: 11px;
+  font-weight: 700;
   color: var(--text-muted);
   writing-mode: vertical-rl;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
-.bivar-axis-b {
+.bivar-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.bivar-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bivar-row {
+  display: flex;
+  gap: 10px;
+}
+.bivar-cell {
+  width: 54px;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bivar-circle {
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  color: #1a1a1a;
+  text-shadow: 0 0 3px rgba(255,255,255,.9), 0 0 5px rgba(255,255,255,.9);
+}
+.bivar-collabel {
   font-size: 11px;
+  font-weight: 700;
   color: var(--text-muted);
-  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 /* ---------- マップ ---------- */

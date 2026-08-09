@@ -126,7 +126,7 @@ document.addEventListener("DOMContentLoaded", () => {
       Panel.clearRankLegend();
     } else if (rank.mode === "bivariate") {
       AppMap.applyBoundaryColors(rank.colorByKeyCode, { fallbackFill: NO_DATA_FILL, fallbackBorder: NO_DATA_BORDER });
-      Panel.updateBivariateLegend(rank.legend.catALabel, rank.legend.catBLabel, rank.legend.colors);
+      Panel.updateBivariateLegend(rank.legend.catALabel, rank.legend.catBLabel, rank.legend.colors, rank.legend.cellPercent);
     } else {
       AppMap.applyBoundaryColors(rank.colorByKeyCode, { fallbackFill: NO_DATA_FILL, fallbackBorder: NO_DATA_BORDER });
       Panel.updateRankLegend(rank.legend.breaks, rank.legend.colors, rank.legend.unitLabel, rank.legend.format);

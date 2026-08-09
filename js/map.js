@@ -34,6 +34,9 @@ const AppMap = (() => {
   let boundaryLayersByKey = new Map(); // KEY_CODE -> Leaflet layer
   let renderedFeatures = [];
   let selectedAreaKeyCodes = new Set(); // 「地域」モードでの選択(現在UIからは非公開、内部的には維持)
+  let fillOpacityRatio = 0.65; // 透明度スライダーで調整(ポリゴン塗りつぶしの不透明度)
+  let lastColorByKeyCode = new Map();
+  let lastApplyOpts = {};
 
   // --- 店舗管理用の補助レイヤー ---
   let storeMarkersLayer = null;
@@ -335,6 +338,9 @@ const AppMap = (() => {
    * 無いポリゴン(colorByKeyCodeに値が無い)の配色を差し替えられる(既定はグレー)。
    */
   function applyBoundaryColors(colorByKeyCode, opts = {}) {
+    lastColorByKeyCode = colorByKeyCode;
+    lastApplyOpts = opts;
+
     const fallbackFill = opts.fallbackFill ?? NO_CONDITION_FILL;
     const fallbackBorder = opts.fallbackBorder ?? NO_CONDITION_BORDER;
     const fallbackWeight = opts.fallbackFill ? 1 : 1.5;
@@ -343,7 +349,7 @@ const AppMap = (() => {
       const fill = colorByKeyCode.get(key);
       layer.setStyle({
         fillColor: fill || fallbackFill,
-        fillOpacity: fill ? 0.65 : 0.45,
+        fillOpacity: fillOpacityRatio,
         color: selectedAreaKeyCodes.has(key) ? "#1a73e8" : fill ? NO_DATA_BORDER : fallbackBorder,
         weight: selectedAreaKeyCodes.has(key) ? 3 : fill ? 1 : fallbackWeight,
       });
@@ -352,6 +358,12 @@ const AppMap = (() => {
 
   function refreshBoundaryStyles() {
     applyBoundaryColors(new Map());
+  }
+
+  /** 「透明度」スライダーからポリゴン塗りつぶしの不透明度(0〜1)を設定し、即座に再描画する */
+  function setFillOpacity(ratio) {
+    fillOpacityRatio = Math.min(1, Math.max(0, ratio));
+    applyBoundaryColors(lastColorByKeyCode, lastApplyOpts);
   }
 
   // ---------------- 現在の図形情報取得 ----------------
@@ -470,6 +482,7 @@ const AppMap = (() => {
     getBoundaryFeatures,
     getActiveFeatures,
     applyBoundaryColors,
+    setFillOpacity,
     getCurrentShapeInfo,
     isShapeReady,
     renderStoreMarkers,
