@@ -7,6 +7,7 @@ const Panel = (() => {
   let els = {};
   let currentShape = null;
   let cityUIBuilt = false;
+  let prevSummary = null; // { deliverable, statHouseholds } — 直前の商圏サマリー(増減表示用)
 
   function escapeHtml(str) {
     return String(str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -14,6 +15,12 @@ const Panel = (() => {
 
   function init() {
     els = {
+      summaryDeliverable: document.getElementById("summary-deliverable"),
+      summaryDeliverableDelta: document.getElementById("summary-deliverable-delta"),
+      summaryStatHouseholds: document.getElementById("summary-stat-households"),
+      summaryStatHouseholdsDelta: document.getElementById("summary-stat-households-delta"),
+      statsCsvStatus: document.getElementById("stats-csv-status"),
+
       searchInput: document.getElementById("search-input"),
       searchBtn: document.getElementById("search-btn"),
       searchResults: document.getElementById("search-results"),
@@ -324,7 +331,7 @@ const Panel = (() => {
 
   function buildSegmentGroups() {
     els.segmentGroups.innerHTML = "";
-    SEGMENT_CONFIG.forEach((cat) => {
+    StatsData.getCategories().forEach((cat) => {
       const group = document.createElement("div");
       group.className = "segment-group";
 
@@ -373,27 +380,93 @@ const Panel = (() => {
 
   function emitResultReset() {
     updateResult({ areas: 0, households: 0, population: 0 });
+    updateZoneSummary([]);
+    clearRankLegend();
+  }
+
+  function clearRankLegend() {
     els.rankLegend.classList.add("hidden");
     els.rankLegend.innerHTML = "";
   }
 
-  function updateRankLegend(breaks, colors, unitLabel) {
+  function formatLegendValue(v, format) {
+    if (format === "percent") return `${(v * 100).toFixed(1)}%`;
+    if (format === "decimal") return v.toFixed(2);
+    return Math.round(v).toLocaleString();
+  }
+
+  /** 1軸(単一比率)・3軸以上(標準化合計スコア)のランク別色分け凡例を表示する */
+  function updateRankLegend(breaks, colors, unitLabel, format = "count") {
     if (!breaks || breaks.length === 0) {
-      els.rankLegend.classList.add("hidden");
-      els.rankLegend.innerHTML = "";
+      clearRankLegend();
       return;
     }
     const rows = [];
-    const bounds = [0, ...breaks, Infinity];
+    const bounds = [-Infinity, ...breaks, Infinity];
     for (let i = colors.length - 1; i >= 0; i--) {
-      const lo = Math.round(bounds[i]);
-      const hi = bounds[i + 1] === Infinity ? "" : ` 〜 ${Math.round(bounds[i + 1]).toLocaleString()}`;
+      const lo = bounds[i] === -Infinity ? "" : `${formatLegendValue(bounds[i], format)} 〜 `;
+      const hi = bounds[i + 1] === Infinity ? "" : formatLegendValue(bounds[i + 1], format);
       rows.push(
-        `<div class="rank-legend-row"><span class="rank-swatch" style="background:${colors[i]}"></span><span>${lo.toLocaleString()}${hi} ${unitLabel}</span></div>`
+        `<div class="rank-legend-row"><span class="rank-swatch" style="background:${colors[i]}"></span><span>${lo}${hi} ${unitLabel}</span></div>`
       );
     }
     els.rankLegend.innerHTML = `<div style="font-weight:700;margin-bottom:4px;">ランク別色分け</div>${rows.join("")}`;
     els.rankLegend.classList.remove("hidden");
+  }
+
+  /** 2軸(バイバリエート)のランク別色分け凡例を3×3グリッドで表示する */
+  function updateBivariateLegend(catALabel, catBLabel, colors) {
+    const cells = [];
+    for (let a = 2; a >= 0; a--) {
+      for (let b = 0; b < 3; b++) {
+        cells.push(`<span class="bivar-cell" style="background:${colors[a][b]}"></span>`);
+      }
+    }
+    els.rankLegend.innerHTML = `
+      <div style="font-weight:700;margin-bottom:6px;">2軸バイバリエート色分け</div>
+      <div class="bivar-legend">
+        <div class="bivar-grid">${cells.join("")}</div>
+        <div class="bivar-axis-a">${escapeHtml(catALabel)} 高<i class="fa-solid fa-arrow-up"></i></div>
+      </div>
+      <div class="bivar-axis-b">${escapeHtml(catBLabel)} 高<i class="fa-solid fa-arrow-right"></i></div>
+    `;
+    els.rankLegend.classList.remove("hidden");
+  }
+
+  // ---------------- 商圏サマリー(サイドバー上部・配達可能箇所数/統計上世帯数) ----------------
+  function formatDelta(delta) {
+    if (!delta) return "";
+    const cls = delta > 0 ? "up" : "down";
+    const sign = delta > 0 ? "+" : "";
+    return `<span class="zone-summary-delta ${cls}">${sign}${Math.round(delta).toLocaleString()}</span>`;
+  }
+
+  /** 現在表示中の商圏ポリゴン(features)から配達可能箇所数・統計上世帯数の合計を集計し、増減付きで表示する */
+  function updateZoneSummary(features) {
+    let deliverable = 0;
+    let statHouseholds = 0;
+    (features || []).forEach((f) => {
+      const record = StatsData.getRecord(f.properties?.KEY_CODE);
+      if (!record) return;
+      deliverable += record.deliverable;
+      statHouseholds += record.statHouseholds;
+    });
+
+    els.summaryDeliverable.textContent = Math.round(deliverable).toLocaleString();
+    els.summaryStatHouseholds.textContent = Math.round(statHouseholds).toLocaleString();
+
+    if (prevSummary) {
+      els.summaryDeliverableDelta.innerHTML = formatDelta(deliverable - prevSummary.deliverable);
+      els.summaryStatHouseholdsDelta.innerHTML = formatDelta(statHouseholds - prevSummary.statHouseholds);
+    } else {
+      els.summaryDeliverableDelta.innerHTML = "";
+      els.summaryStatHouseholdsDelta.innerHTML = "";
+    }
+    prevSummary = { deliverable, statHouseholds };
+  }
+
+  function setStatsCsvStatus(text) {
+    if (els.statsCsvStatus) els.statsCsvStatus.textContent = text;
   }
 
   // ---------------- 属性データ状態表示 ----------------
@@ -457,6 +530,10 @@ const Panel = (() => {
     updateResult,
     emitResultReset,
     updateRankLegend,
+    updateBivariateLegend,
+    clearRankLegend,
+    updateZoneSummary,
+    setStatsCsvStatus,
     wireStatsFile,
     setBoundaryStatus,
     wireReset,

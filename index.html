@@ -60,6 +60,28 @@
 
     <div class="panel-body">
 
+      <!-- 商圏サマリー(常時表示・表示中の商圏ポリゴンの合計) -->
+      <section class="panel-section" id="zone-summary-section">
+        <label class="section-title">商圏サマリー</label>
+        <div class="zone-summary-box">
+          <div class="zone-summary-row">
+            <span class="zone-summary-label">配達可能箇所数</span>
+            <span class="zone-summary-value-wrap">
+              <strong id="summary-deliverable">0</strong>
+              <span id="summary-deliverable-delta"></span>
+            </span>
+          </div>
+          <div class="zone-summary-row">
+            <span class="zone-summary-label">統計上世帯数</span>
+            <span class="zone-summary-value-wrap">
+              <strong id="summary-stat-households">0</strong>
+              <span id="summary-stat-households-delta"></span>
+            </span>
+          </div>
+        </div>
+        <div id="stats-csv-status" class="hint small"></div>
+      </section>
+
       <!-- 検索 -->
       <section class="panel-section">
         <label class="section-title">地点検索</label>
@@ -159,8 +181,12 @@
 
       <!-- ③④ 条件パネル(属性条件・新聞・指標を統合) -->
       <section class="panel-section hidden" id="segment-panel">
-        <label class="section-title">属性条件(世帯セグメント)</label>
-        <p class="hint small">条件を選択すると、カテゴリ内選択肢の割合から推定件数を算出します(独立仮定に基づく概算)。</p>
+        <label class="section-title">属性条件(統計指標)</label>
+        <p class="hint small">
+          カテゴリ内の選択肢は合計してから分母(年代=人口総数、それ以外=統計上世帯数)で割った比率でランキングします。
+          選択したカテゴリ数が1つなら比率順に5段階、2つなら2軸バイバリエートで9パターン、
+          3つ以上なら各カテゴリの比率を標準化して合計したスコアで5段階に色分けします。
+        </p>
         <div id="segment-groups"></div>
 
         <div class="fw-section-bar">新聞(配布媒体)の指定</div>
@@ -418,6 +444,9 @@
 <script src="data/sample_stats.js"></script>
 <script src="data/newspapers.js"></script>
 <script src="js/config.js"></script>
+<script src="js/statsConfig.js"></script>
+<script src="js/statsData.js"></script>
+<script src="js/rankEngine.js"></script>
 <script src="js/dataStore.js"></script>
 <script src="js/boundaryLoader.js"></script>
 <script src="js/shapeBuilders.js"></script>

@@ -372,6 +372,63 @@ input[type="range"] { width: 100%; }
   flex-shrink: 0;
 }
 
+/* ---------- 商圏サマリー(サイドバー上部) ---------- */
+.zone-summary-box {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.zone-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 12.5px;
+}
+.zone-summary-label { color: var(--text-muted); }
+.zone-summary-value-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.zone-summary-value-wrap strong {
+  color: var(--primary);
+  font-size: 14px;
+}
+.zone-summary-delta {
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.zone-summary-delta.up { color: #1a7f37; background: #dcf5e3; }
+.zone-summary-delta.down { color: #c0341f; background: #fbe0dc; }
+
+/* ---------- 2軸バイバリエート凡例 ---------- */
+.bivar-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bivar-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 16px);
+  grid-template-rows: repeat(3, 16px);
+  gap: 2px;
+}
+.bivar-cell { border-radius: 2px; }
+.bivar-axis-a {
+  font-size: 11px;
+  color: var(--text-muted);
+  writing-mode: vertical-rl;
+}
+.bivar-axis-b {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
 /* ---------- マップ ---------- */
 #map-area {
   flex: 1;

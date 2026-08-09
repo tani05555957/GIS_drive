@@ -7,8 +7,19 @@ document.addEventListener("DOMContentLoaded", () => {
   StoreManager.init();
   DeliveryPlan.init();
 
-  // 初期表示: サンプル属性データ(千代田区の実KEY_CODEベース)を読み込み
+  // 初期表示: サンプル属性データ(千代田区の実KEY_CODEベース、配達プランの指標ツリー用)を読み込み
   DataStore.loadSegmentTable(SAMPLE_SEGMENT_TABLE);
+
+  // 「条件を選択」のランキングに使う実統計データ(統計データ/*.csv)を読み込む
+  Panel.setStatsCsvStatus("統計データを読み込み中…");
+  StatsData.loadFromUrl(STAT_CSV_PATH)
+    .then((count) => {
+      Panel.setStatsCsvStatus(`統計データ読み込み完了(${count.toLocaleString()}件、東京都)`);
+      recompute();
+    })
+    .catch((err) => {
+      Panel.setStatsCsvStatus(`統計データの読み込みに失敗しました: ${err.message}`);
+    });
 
   Panel.wireSearch();
 
@@ -97,29 +108,29 @@ document.addEventListener("DOMContentLoaded", () => {
   function recompute() {
     const features = AppMap.getActiveFeatures();
     const selections = Panel.getSelections();
+
     let totalHouseholds = 0;
     let totalPopulation = 0;
-    const valueByKeyCode = new Map();
-
     features.forEach((f) => {
-      const key = f.properties?.KEY_CODE;
-      const h = DataStore.estimateHouseholds(f, selections);
-      const p = DataStore.estimatePopulation(f, selections);
-      totalHouseholds += h;
-      totalPopulation += p;
-      if (key) valueByKeyCode.set(key, h);
+      const record = StatsData.getRecord(f.properties?.KEY_CODE);
+      if (!record) return;
+      totalHouseholds += record.statHouseholds;
+      totalPopulation += record.population;
     });
-
     Panel.updateResult({ areas: features.length, households: totalHouseholds, population: totalPopulation });
+    Panel.updateZoneSummary(features);
 
-    const { breaks, rankOf } = DataStore.classifyByQuantile(valueByKeyCode, RANK_COLORS.length);
-    const colorByKeyCode = new Map();
-    valueByKeyCode.forEach((v, key) => {
-      const rank = rankOf(v);
-      if (rank >= 0) colorByKeyCode.set(key, RANK_COLORS[rank]);
-    });
-    AppMap.applyBoundaryColors(colorByKeyCode);
-    Panel.updateRankLegend(breaks, RANK_COLORS, "世帯");
+    const rank = RankEngine.compute(features, selections, StatsData.getCategories());
+    if (rank.mode === "none") {
+      AppMap.applyBoundaryColors(rank.colorByKeyCode);
+      Panel.clearRankLegend();
+    } else if (rank.mode === "bivariate") {
+      AppMap.applyBoundaryColors(rank.colorByKeyCode, { fallbackFill: NO_DATA_FILL, fallbackBorder: NO_DATA_BORDER });
+      Panel.updateBivariateLegend(rank.legend.catALabel, rank.legend.catBLabel, rank.legend.colors);
+    } else {
+      AppMap.applyBoundaryColors(rank.colorByKeyCode, { fallbackFill: NO_DATA_FILL, fallbackBorder: NO_DATA_BORDER });
+      Panel.updateRankLegend(rank.legend.breaks, rank.legend.colors, rank.legend.unitLabel, rank.legend.format);
+    }
   }
 
   function debounce(fn, wait) {

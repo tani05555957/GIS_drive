@@ -305,7 +305,7 @@ const AppMap = (() => {
     features.forEach((feature) => {
       const key = feature.properties?.KEY_CODE;
       const layer = L.geoJSON(feature, {
-        style: () => ({ color: "#8a8f98", weight: 1, fillColor: "#dfe3e8", fillOpacity: 0.35 }),
+        style: () => ({ color: NO_CONDITION_BORDER, weight: 1.5, fillColor: NO_CONDITION_FILL, fillOpacity: 0.45 }),
       });
       const name = [feature.properties?.CITY_NAME, feature.properties?.S_NAME].filter(Boolean).join(" ");
       if (name) layer.bindTooltip(name, { sticky: true, className: "area-tooltip" });
@@ -328,15 +328,24 @@ const AppMap = (() => {
     return renderedFeatures;
   }
 
-  /** ランク(colorByKeyCode)と選択状態に応じて境界ポリゴンを塗り分ける */
-  function applyBoundaryColors(colorByKeyCode) {
+  /**
+   * ランク(colorByKeyCode)と選択状態に応じて境界ポリゴンを塗り分ける。
+   * colorByKeyCode が空(条件未選択)の場合は既定の薄い黄色/濃い黄色で表示する。
+   * opts.fallbackFill/fallbackBorder を指定すると、ランキング自体は有効だが該当データが
+   * 無いポリゴン(colorByKeyCodeに値が無い)の配色を差し替えられる(既定はグレー)。
+   */
+  function applyBoundaryColors(colorByKeyCode, opts = {}) {
+    const fallbackFill = opts.fallbackFill ?? NO_CONDITION_FILL;
+    const fallbackBorder = opts.fallbackBorder ?? NO_CONDITION_BORDER;
+    const fallbackWeight = opts.fallbackFill ? 1 : 1.5;
+
     boundaryLayersByKey.forEach((layer, key) => {
       const fill = colorByKeyCode.get(key);
       layer.setStyle({
-        fillColor: fill || "#dfe3e8",
-        fillOpacity: fill ? 0.65 : 0.35,
-        color: selectedAreaKeyCodes.has(key) ? "#1a73e8" : "#8a8f98",
-        weight: selectedAreaKeyCodes.has(key) ? 3 : 1,
+        fillColor: fill || fallbackFill,
+        fillOpacity: fill ? 0.65 : 0.45,
+        color: selectedAreaKeyCodes.has(key) ? "#1a73e8" : fill ? NO_DATA_BORDER : fallbackBorder,
+        weight: selectedAreaKeyCodes.has(key) ? 3 : fill ? 1 : fallbackWeight,
       });
     });
   }
