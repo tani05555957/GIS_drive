@@ -464,8 +464,6 @@ input[type="range"] { width: 100%; }
   display: none;
 }
 
-.plan-window { width: 480px; left: 380px; }
-
 .fw-header {
   background: linear-gradient(180deg, var(--primary) 0%, var(--primary-dark) 100%);
   color: #fff;
@@ -698,10 +696,35 @@ input[type="range"] { width: 100%; }
 }
 
 @media (max-width: 900px) {
-  .floating-window, .plan-window {
+  .floating-window {
     left: 12px;
     right: 12px;
     width: auto;
     max-width: none;
   }
 }
+
+/* ---------- 開始ゲート(アプリ表示前の①作成方法の指定) ---------- */
+.app-hidden { display: none !important; }
+
+#start-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 20, 22, 0.55);
+}
+#start-gate.hidden { display: none; }
+
+.gate-card {
+  width: 420px;
+  max-width: 92vw;
+  max-height: 88vh;
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 12px 36px rgba(0,0,0,.35);
+}
+.gate-card .fw-header { border-radius: 10px 10px 0 0; }

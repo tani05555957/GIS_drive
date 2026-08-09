@@ -14,16 +14,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   Panel.wireStatsFile(() => recompute());
   Panel.onSelectionsChanged(() => recompute());
-  Panel.wireReportButton(() => Report.captureAndDownload());
+  Panel.wireReportButton(() => DeliveryPlan.exportReportBundle());
   Panel.wireReset();
-
-  document.getElementById("header-home-btn").addEventListener("click", () => {
-    AppMap.flyTo(35.681236, 139.767125, 15);
-  });
 
   let boundaryRequestId = 0;
 
-  /** 現在の商圏図形/地域モードの範囲に応じて、必要な町丁目・字境界だけを読み込んで描画する */
+  /** 現在の商圏作成方法の範囲に応じて、必要な町丁目・字境界だけを読み込んで描画する */
   async function refreshBoundaries() {
     const info = AppMap.getCurrentShapeInfo();
     const requestId = ++boundaryRequestId;
@@ -40,6 +36,43 @@ document.addEventListener("DOMContentLoaded", () => {
       } else {
         AppMap.renderBoundaryFeatures(result.features);
         Panel.setBoundaryStatus(`${result.features.length.toLocaleString()} 町丁目・字を表示中`);
+      }
+    } else if (info.mode === "city") {
+      if (info.selectedCityCodes.length === 0) {
+        AppMap.renderBoundaryFeatures([]);
+        Panel.setBoundaryStatus("");
+      } else {
+        Panel.setBoundaryStatus("町丁目境界を読み込み中…");
+        const features = await BoundaryLoader.getFeaturesForMunicipalities(info.selectedCityCodes);
+        if (requestId !== boundaryRequestId) return;
+        AppMap.renderBoundaryFeatures(features);
+        Panel.setBoundaryStatus(`${features.length.toLocaleString()} 町丁目・字を表示中(市区町村 ${info.selectedCityCodes.length}件)`);
+      }
+    } else if (info.mode === "multiStore") {
+      if (info.selectedStoreIds.length === 0) {
+        AppMap.renderBoundaryFeatures([]);
+        Panel.setBoundaryStatus("");
+      } else {
+        Panel.setBoundaryStatus("町丁目境界を読み込み中…");
+        const radius = Panel.getMultiStoreRadius();
+        const seen = new Map();
+        let anyTooBroad = false;
+        for (const id of info.selectedStoreIds) {
+          const store = StoreManager.getStoreById(id);
+          if (!store) continue;
+          const shape = ShapeBuilders.circle(store.lat, store.lon, radius);
+          const result = await BoundaryLoader.getFeaturesIntersectingShape(shape);
+          if (result.tooBroad) { anyTooBroad = true; continue; }
+          result.features.forEach((f) => seen.set(f.properties.KEY_CODE, f));
+        }
+        if (requestId !== boundaryRequestId) return;
+        const features = Array.from(seen.values());
+        AppMap.renderBoundaryFeatures(features);
+        Panel.setBoundaryStatus(
+          anyTooBroad
+            ? `一部の店舗は範囲が広すぎるため除外されました。${features.length.toLocaleString()} 町丁目・字を表示中`
+            : `${features.length.toLocaleString()} 町丁目・字を表示中(店舗 ${info.selectedStoreIds.length}件)`
+        );
       }
     } else if (info.mode && info.geojson) {
       Panel.setBoundaryStatus("町丁目境界を読み込み中…");
@@ -62,17 +95,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function recompute() {
-    const info = AppMap.getCurrentShapeInfo();
-    const rendered = AppMap.getBoundaryFeatures();
-
-    let features;
-    if (info.mode === "area") {
-      const selected = new Set(info.selectedKeyCodes || []);
-      features = rendered.filter((f) => selected.has(f.properties?.KEY_CODE));
-    } else {
-      features = rendered; // 既に選択範囲と交差する町丁目のみが描画されている
-    }
-
+    const features = AppMap.getActiveFeatures();
     const selections = Panel.getSelections();
     let totalHouseholds = 0;
     let totalPopulation = 0;
@@ -116,6 +139,14 @@ document.addEventListener("DOMContentLoaded", () => {
   AppMap.on("areaSelectionChanged", () => {
     Panel.setConditionEnabled(AppMap.isShapeReady());
     recompute();
+  });
+  AppMap.on("citySelectionChanged", () => {
+    Panel.setConditionEnabled(AppMap.isShapeReady());
+    debouncedRefresh();
+  });
+  AppMap.on("multiStoreSelectionChanged", () => {
+    Panel.setConditionEnabled(AppMap.isShapeReady());
+    debouncedRefresh();
   });
   AppMap.on("shapeCleared", () => {
     Panel.setConditionEnabled(false);

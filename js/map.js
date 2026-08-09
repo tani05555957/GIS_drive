@@ -26,16 +26,18 @@ const AppMap = (() => {
   let trainLayer = null;
   let trainShapeGeoJson = null; // 電車商圏モードの実ジオメトリ(交差判定用)
 
+  let selectedCityCodes = new Set(); // 「市区町村」モードでの選択(市区町村コード)
+  let selectedMultiStoreIds = new Set(); // 「多店舗分析」モードでの選択(店舗ID)
+
   // --- 町丁目・字境界レイヤー ---
   let boundaryLayerGroup = null;
   let boundaryLayersByKey = new Map(); // KEY_CODE -> Leaflet layer
   let renderedFeatures = [];
-  let selectedAreaKeyCodes = new Set(); // 「地域」モードでの選択
+  let selectedAreaKeyCodes = new Set(); // 「地域」モードでの選択(現在UIからは非公開、内部的には維持)
 
-  // --- 店舗管理・配達プランウィザード用の補助レイヤー ---
+  // --- 店舗管理用の補助レイヤー ---
   let storeMarkersLayer = null;
   let storeCirclesLayer = null;
-  let planShapeLayer = null;
   let oneShotClickHandler = null;
 
   // --- 簡易 pub/sub ---
@@ -143,6 +145,8 @@ const AppMap = (() => {
     trainShapeGeoJson = null;
 
     selectedAreaKeyCodes.clear();
+    selectedCityCodes.clear();
+    selectedMultiStoreIds.clear();
 
     emit("shapeCleared");
   }
@@ -150,6 +154,18 @@ const AppMap = (() => {
   function clearAreaSelection() {
     selectedAreaKeyCodes.clear();
     emit("areaSelectionChanged", getCurrentShapeInfo());
+  }
+
+  /** 「市区町村」モード: 選択された市区町村コードの一覧を設定する(featureの取得・描画は呼び出し側が行う) */
+  function setCitySelection(codes) {
+    selectedCityCodes = new Set(codes);
+    emit("citySelectionChanged", getCurrentShapeInfo());
+  }
+
+  /** 「多店舗分析」モード: 選択された店舗IDの一覧を設定する(featureの取得・描画は呼び出し側が行う) */
+  function setMultiStoreSelection(ids) {
+    selectedMultiStoreIds = new Set(ids);
+    emit("multiStoreSelectionChanged", getCurrentShapeInfo());
   }
 
   function setCircleRadius(meters) {
@@ -167,17 +183,31 @@ const AppMap = (() => {
   }
 
   // ---------------- 地図クリック処理 ----------------
+  function placeCircleOrigin(latlng) {
+    circleCenter = latlng;
+    if (circleLayer) map.removeLayer(circleLayer);
+    circleLayer = L.circle(circleCenter, {
+      radius: circleRadiusM,
+      color: "#1a73e8",
+      weight: 2,
+      fillOpacity: 0.15,
+    }).addTo(map);
+    emit("shapeUpdated", getCurrentShapeInfo());
+  }
+
+  function placeTimeOrigin(latlng) {
+    timeOrigin = latlng;
+    emit("timeOriginSet");
+  }
+
+  function placeTrainOrigin(latlng) {
+    trainOrigin = latlng;
+    buildTrainShape();
+  }
+
   function onMapClick(e) {
     if (mode === "circle") {
-      circleCenter = e.latlng;
-      if (circleLayer) map.removeLayer(circleLayer);
-      circleLayer = L.circle(circleCenter, {
-        radius: circleRadiusM,
-        color: "#1a73e8",
-        weight: 2,
-        fillOpacity: 0.15,
-      }).addTo(map);
-      emit("shapeUpdated", getCurrentShapeInfo());
+      placeCircleOrigin(e.latlng);
     } else if (mode === "polygon") {
       if (polygonFinal) return; // 確定済みなら追加不可(リセットしてから)
       if (polygonPoints.length >= 3) {
@@ -191,12 +221,20 @@ const AppMap = (() => {
       polygonPoints.push(e.latlng);
       redrawPolygonDraft();
     } else if (mode === "time") {
-      timeOrigin = e.latlng;
-      emit("timeOriginSet");
+      placeTimeOrigin(e.latlng);
     } else if (mode === "train") {
-      trainOrigin = e.latlng;
-      buildTrainShape();
+      placeTrainOrigin(e.latlng);
     }
+  }
+
+  /**
+   * 地図をクリックしたのと同じ効果で起点を設定する(店舗を起点に選んだ場合などに利用)。
+   * 現在のモードが circle/time/train でなければ何もしない。
+   */
+  function setOriginPoint(latlng) {
+    if (mode === "circle") placeCircleOrigin(latlng);
+    else if (mode === "time") placeTimeOrigin(latlng);
+    else if (mode === "train") placeTrainOrigin(latlng);
   }
 
   function redrawPolygonDraft() {
@@ -326,13 +364,31 @@ const AppMap = (() => {
     if (mode === "area") {
       return { mode, selectedKeyCodes: Array.from(selectedAreaKeyCodes) };
     }
+    if (mode === "city") {
+      return { mode, selectedCityCodes: Array.from(selectedCityCodes) };
+    }
+    if (mode === "multiStore") {
+      return { mode, selectedStoreIds: Array.from(selectedMultiStoreIds) };
+    }
     return { mode, geojson: null };
   }
 
   function isShapeReady() {
     const info = getCurrentShapeInfo();
     if (info.mode === "area") return info.selectedKeyCodes.length > 0;
+    if (info.mode === "city") return info.selectedCityCodes.length > 0;
+    if (info.mode === "multiStore") return info.selectedStoreIds.length > 0;
     return !!info.geojson;
+  }
+
+  /** 現在の商圏指定方法に応じた「集計対象のfeature一覧」を返す(main.js/deliveryPlan.js で共通利用) */
+  function getActiveFeatures() {
+    const info = getCurrentShapeInfo();
+    if (info.mode === "area") {
+      const selected = new Set(info.selectedKeyCodes || []);
+      return renderedFeatures.filter((f) => selected.has(f.properties?.KEY_CODE));
+    }
+    return renderedFeatures;
   }
 
   // ---------------- 店舗管理レイヤー(新規) ----------------
@@ -381,19 +437,6 @@ const AppMap = (() => {
     map.once("click", oneShotClickHandler);
   }
 
-  // ---------------- 配達プランウィザード用の図形オーバーレイ(新規) ----------------
-  function renderPlanShape(geojson) {
-    clearPlanShape();
-    if (!geojson) return;
-    planShapeLayer = L.geoJSON(geojson, {
-      style: { color: "#8e44ad", weight: 2, dashArray: "4,4", fillOpacity: 0.06 },
-    }).addTo(map);
-  }
-
-  function clearPlanShape() {
-    if (planShapeLayer) { map.removeLayer(planShapeLayer); planShapeLayer = null; }
-  }
-
   return {
     init,
     getMap,
@@ -406,13 +449,17 @@ const AppMap = (() => {
     setMode,
     clearShape,
     clearAreaSelection,
+    setCitySelection,
+    setMultiStoreSelection,
     setCircleRadius,
+    setOriginPoint,
     undoPolygonPoint,
     onDoubleClickFinishPolygon,
     buildTimeShape,
     buildTrainShape,
     renderBoundaryFeatures,
     getBoundaryFeatures,
+    getActiveFeatures,
     applyBoundaryColors,
     getCurrentShapeInfo,
     isShapeReady,
@@ -420,7 +467,5 @@ const AppMap = (() => {
     renderStoreCircles,
     clearStoreLayers,
     enableOneShotPlacement,
-    renderPlanShape,
-    clearPlanShape,
   };
 })();

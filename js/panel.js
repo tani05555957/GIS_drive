@@ -1,10 +1,16 @@
 /**
- * 左サイドパネルの UI 状態管理(形状選択・条件パネル開閉・リセット等)。
- * 地図描画そのものは AppMap (map.js) に委譲する。
+ * 左サイドパネルの UI 状態管理(商圏作成方法・条件パネル開閉・リセット等)。
+ * 地図描画そのものは AppMap (map.js) に、新聞/指標/予算通数/保存等の分析ロジックは
+ * DeliveryPlan (js/deliveryPlan.js) に委譲する。
  */
 const Panel = (() => {
   let els = {};
   let currentShape = null;
+  let cityUIBuilt = false;
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
 
   function init() {
     els = {
@@ -13,23 +19,33 @@ const Panel = (() => {
       searchResults: document.getElementById("search-results"),
 
       shapeSelect: document.getElementById("shape-select"),
+      optCity: document.getElementById("opt-city"),
       optCircle: document.getElementById("opt-circle"),
-      optPolygon: document.getElementById("opt-polygon"),
-      optTime: document.getElementById("opt-time"),
       optTrain: document.getElementById("opt-train"),
-      optArea: document.getElementById("opt-area"),
+      optTime: document.getElementById("opt-time"),
+      optPolygon: document.getElementById("opt-polygon"),
+      optMultiStore: document.getElementById("opt-multistore"),
       trainStatus: document.getElementById("train-status"),
 
+      cityPrefSelect: document.getElementById("city-pref-select"),
+      cityChecklist: document.getElementById("city-checklist"),
+
+      circleOriginStore: document.getElementById("circle-origin-store"),
       circleRadius: document.getElementById("circle-radius"),
       circleRadiusVal: document.getElementById("circle-radius-val"),
-      polygonUndo: document.getElementById("polygon-undo"),
 
+      trainOriginStore: document.getElementById("train-origin-store"),
+
+      timeOriginStore: document.getElementById("time-origin-store"),
       timeMode: document.getElementById("time-mode"),
       timeMinutes: document.getElementById("time-minutes"),
       timeMinutesVal: document.getElementById("time-minutes-val"),
       orsApiKey: document.getElementById("ors-api-key"),
 
-      areaClear: document.getElementById("area-clear"),
+      polygonUndo: document.getElementById("polygon-undo"),
+
+      multiStoreList: document.getElementById("multistore-list"),
+      multiStoreRadius: document.getElementById("multistore-radius"),
 
       conditionBtn: document.getElementById("condition-btn"),
       segmentPanel: document.getElementById("segment-panel"),
@@ -51,14 +67,14 @@ const Panel = (() => {
     buildSegmentGroups();
     wireShapeButtons();
     wireCircleOptions();
-    wirePolygonOptions();
-    wireTimeOptions();
     wireTrainOptions();
-    wireAreaOptions();
+    wireTimeOptions();
+    wirePolygonOptions();
+    wireMultiStoreOptions();
     wireConditionToggle();
   }
 
-  // ---------------- 形状選択ボタン ----------------
+  // ---------------- 商圏作成方法ボタン ----------------
   function wireShapeButtons() {
     els.shapeSelect.querySelectorAll(".shape-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -68,27 +84,36 @@ const Panel = (() => {
     });
   }
 
-  function selectShape(shape) {
+  async function selectShape(shape) {
     currentShape = shape;
 
     els.shapeSelect.querySelectorAll(".shape-btn").forEach((b) => {
       b.classList.toggle("active", b.dataset.shape === shape);
     });
-    [els.optCircle, els.optPolygon, els.optTime, els.optTrain, els.optArea].forEach((el) => el.classList.add("hidden"));
+    [els.optCity, els.optCircle, els.optTrain, els.optTime, els.optPolygon, els.optMultiStore].forEach((el) =>
+      el.classList.add("hidden")
+    );
 
     resetConditionPanel();
 
-    if (shape === "circle") {
+    if (shape === "city") {
+      els.optCity.classList.remove("hidden");
+      await populateCityUI();
+    } else if (shape === "circle") {
       els.optCircle.classList.remove("hidden");
-    } else if (shape === "polygon") {
-      els.optPolygon.classList.remove("hidden");
-    } else if (shape === "time") {
-      els.optTime.classList.remove("hidden");
+      populateStoreDropdown(els.circleOriginStore);
     } else if (shape === "train") {
       els.optTrain.classList.remove("hidden");
       els.trainStatus.textContent = "";
-    } else if (shape === "area") {
-      els.optArea.classList.remove("hidden");
+      populateStoreDropdown(els.trainOriginStore);
+    } else if (shape === "time") {
+      els.optTime.classList.remove("hidden");
+      populateStoreDropdown(els.timeOriginStore);
+    } else if (shape === "polygon") {
+      els.optPolygon.classList.remove("hidden");
+    } else if (shape === "multiStore") {
+      els.optMultiStore.classList.remove("hidden");
+      populateMultiStoreList();
     }
 
     AppMap.setMode(shape);
@@ -96,18 +121,94 @@ const Panel = (() => {
     emitResultReset();
   }
 
-  // ---------------- 円形 ----------------
+  /** 選択方法ボタンを外部(プラン複製の読み込みなど)から切り替えるためのAPI */
+  async function selectShapeExternally(shape) {
+    await selectShape(shape);
+  }
+
+  function getCurrentShape() {
+    return currentShape;
+  }
+
+  // ---------------- 起点店舗セレクト(円・電車・所要時間で共通) ----------------
+  function populateStoreDropdown(selectEl) {
+    const stores = StoreManager.getStores();
+    const prev = selectEl.value;
+    selectEl.innerHTML =
+      `<option value="">(地図をクリックして指定)</option>` +
+      stores.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
+    if (stores.some((s) => s.id === prev)) selectEl.value = prev;
+  }
+
+  function wireOriginStoreSelect(selectEl) {
+    selectEl.addEventListener("change", () => {
+      if (!selectEl.value) return;
+      const store = StoreManager.getStoreById(selectEl.value);
+      if (store) AppMap.setOriginPoint(L.latLng(store.lat, store.lon));
+    });
+  }
+
+  // ---------------- 市区町村 ----------------
+  async function populateCityUI() {
+    if (!cityUIBuilt) {
+      await BoundaryLoader.loadIndex();
+      const entries = BoundaryLoader.getMunicipalityIndex();
+      const prefMap = new Map();
+      entries.forEach((e) => {
+        if (!prefMap.has(e.pref)) prefMap.set(e.pref, e.prefName);
+      });
+      const prefList = Array.from(prefMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+      els.cityPrefSelect.innerHTML = prefList.map(([code, name]) => `<option value="${code}">${name}</option>`).join("");
+      els.cityPrefSelect.addEventListener("change", renderCityChecklist);
+      cityUIBuilt = true;
+    }
+    renderCityChecklist();
+  }
+
+  function renderCityChecklist() {
+    const entries = BoundaryLoader.getMunicipalityIndex();
+    const pref = els.cityPrefSelect.value;
+    const cities = entries.filter((e) => e.pref === pref).sort((a, b) => a.code.localeCompare(b.code));
+    els.cityChecklist.innerHTML = cities
+      .map((c) => `<label><input type="checkbox" class="city-check" value="${c.code}"> ${escapeHtml(c.name)}</label>`)
+      .join("");
+    els.cityChecklist.querySelectorAll(".city-check").forEach((cb) => cb.addEventListener("change", onCityCheckChange));
+  }
+
+  function onCityCheckChange() {
+    const codes = Array.from(els.cityChecklist.querySelectorAll(".city-check:checked")).map((cb) => cb.value);
+    AppMap.setCitySelection(codes);
+  }
+
+  function getCheckedCityCodes() {
+    return Array.from(els.cityChecklist.querySelectorAll(".city-check:checked")).map((cb) => cb.value);
+  }
+
+  // ---------------- 円 ----------------
   function wireCircleOptions() {
     els.circleRadius.addEventListener("input", () => {
       const v = Number(els.circleRadius.value);
       els.circleRadiusVal.textContent = v;
       AppMap.setCircleRadius(v);
     });
+    wireOriginStoreSelect(els.circleOriginStore);
   }
 
-  // ---------------- 多角形 ----------------
-  function wirePolygonOptions() {
-    els.polygonUndo.addEventListener("click", () => AppMap.undoPolygonPoint());
+  // ---------------- 電車(新規) ----------------
+  function wireTrainOptions() {
+    wireOriginStoreSelect(els.trainOriginStore);
+    AppMap.on("trainLoading", () => {
+      els.trainStatus.textContent = "最寄り駅を検索中…";
+    });
+    AppMap.on("trainShapeReady", (props) => {
+      if (props?.fallback) {
+        els.trainStatus.textContent = "最寄り駅が見つからなかったため、近似円で表示しています。";
+      } else if (props?.stationName) {
+        els.trainStatus.textContent = `最寄り駅: ${props.stationName}(起点から約${props.distanceM}m)`;
+      } else {
+        els.trainStatus.textContent = "";
+      }
+    });
   }
 
   // ---------------- 所要時間 ----------------
@@ -132,27 +233,41 @@ const Panel = (() => {
     els.orsApiKey.addEventListener("change", rebuildTimeShape);
 
     AppMap.on("timeOriginSet", rebuildTimeShape);
+    wireOriginStoreSelect(els.timeOriginStore);
   }
 
-  // ---------------- 電車商圏(新規) ----------------
-  function wireTrainOptions() {
-    AppMap.on("trainLoading", () => {
-      els.trainStatus.textContent = "最寄り駅を検索中…";
-    });
-    AppMap.on("trainShapeReady", (props) => {
-      if (props?.fallback) {
-        els.trainStatus.textContent = "最寄り駅が見つからなかったため、近似円で表示しています。";
-      } else if (props?.stationName) {
-        els.trainStatus.textContent = `最寄り駅: ${props.stationName}(起点から約${props.distanceM}m)`;
-      } else {
-        els.trainStatus.textContent = "";
-      }
+  // ---------------- 任意商圏(自由描画) ----------------
+  function wirePolygonOptions() {
+    els.polygonUndo.addEventListener("click", () => AppMap.undoPolygonPoint());
+  }
+
+  // ---------------- 多店舗分析 ----------------
+  function wireMultiStoreOptions() {
+    els.multiStoreRadius.addEventListener("change", () => {
+      if (currentShape === "multiStore") onMultiStoreCheckChange();
     });
   }
 
-  // ---------------- 地域 ----------------
-  function wireAreaOptions() {
-    els.areaClear.addEventListener("click", () => AppMap.clearAreaSelection());
+  function populateMultiStoreList() {
+    const stores = StoreManager.getStores();
+    els.multiStoreList.innerHTML =
+      stores
+        .map((s) => `<label><input type="checkbox" class="multi-store-check" value="${s.id}"> ${escapeHtml(s.name)}</label>`)
+        .join("") || "<div class='hint small'>店舗が登録されていません(先に店舗管理から登録してください)</div>";
+    els.multiStoreList.querySelectorAll(".multi-store-check").forEach((cb) => cb.addEventListener("change", onMultiStoreCheckChange));
+  }
+
+  function onMultiStoreCheckChange() {
+    const ids = Array.from(els.multiStoreList.querySelectorAll(".multi-store-check:checked")).map((cb) => cb.value);
+    AppMap.setMultiStoreSelection(ids);
+  }
+
+  function getCheckedMultiStoreIds() {
+    return Array.from(els.multiStoreList.querySelectorAll(".multi-store-check:checked")).map((cb) => cb.value);
+  }
+
+  function getMultiStoreRadius() {
+    return Number(els.multiStoreRadius.value) || 500;
   }
 
   // ---------------- 検索 ----------------
@@ -316,6 +431,10 @@ const Panel = (() => {
       els.circleRadiusVal.textContent = 500;
       els.timeMinutes.value = 10;
       els.timeMinutesVal.textContent = 10;
+      els.circleOriginStore.value = "";
+      els.trainOriginStore.value = "";
+      els.timeOriginStore.value = "";
+      if (typeof DeliveryPlan !== "undefined") DeliveryPlan.reset();
       if (onReset) onReset();
     });
   }
@@ -327,6 +446,11 @@ const Panel = (() => {
   return {
     init,
     wireSearch,
+    selectShapeExternally,
+    getCurrentShape,
+    getCheckedCityCodes,
+    getCheckedMultiStoreIds,
+    getMultiStoreRadius,
     setConditionEnabled,
     getSelections,
     onSelectionsChanged,
