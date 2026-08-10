@@ -108,26 +108,6 @@ const DataStore = (() => {
     return { breaks, rankOf };
   }
 
-  /**
-   * 配達プランウィザードの「指標」表示用。categoryKey "census" は population/households を
-   * 特別扱いし、それ以外は record.segments[categoryKey][leafKey] を返す。
-   * 対応するデータが無い場合は null(=データ未提供)を返す。
-   */
-  function getIndicatorValue(feature, categoryKey, leafKey) {
-    if (categoryKey === "census") {
-      if (leafKey === "households") return getHouseholds(feature);
-      if (leafKey === "population") {
-        const record = segmentByKeyCode.get(feature.properties?.KEY_CODE);
-        return record && record.population != null ? Number(record.population) : null;
-      }
-      return null;
-    }
-    const record = segmentByKeyCode.get(feature.properties?.KEY_CODE);
-    const seg = record?.segments?.[categoryKey];
-    if (!seg || seg[leafKey] === undefined) return null;
-    return Number(seg[leafKey]) || 0;
-  }
-
   return {
     loadSegmentTable,
     hasSegmentData,
@@ -135,6 +115,5 @@ const DataStore = (() => {
     estimateHouseholds,
     estimatePopulation,
     classifyByQuantile,
-    getIndicatorValue,
   };
 })();

@@ -34,7 +34,7 @@ const AppMap = (() => {
   let boundaryLayersByKey = new Map(); // KEY_CODE -> Leaflet layer
   let renderedFeatures = [];
   let selectedAreaKeyCodes = new Set(); // 「地域」モードでの選択(現在UIからは非公開、内部的には維持)
-  let fillOpacityRatio = 0.65; // 透明度スライダーで調整(ポリゴン塗りつぶしの不透明度)
+  let fillOpacityRatio = 0.5; // 透明度スライダーで調整(ポリゴン塗りつぶしの不透明度、既定50%)
   let lastColorByKeyCode = new Map();
   let lastApplyOpts = {};
 

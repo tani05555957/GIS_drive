@@ -496,6 +496,30 @@ input[type="range"] { width: 100%; }
   z-index: 1000;
 }
 
+/* ---------- ランキング凡例ウィンドウ(条件選択時に地図内へフロート表示) ---------- */
+.rank-window {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  width: 300px;
+  max-width: calc(100% - 28px);
+  max-height: calc(100% - 28px);
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.28);
+  z-index: 1100;
+}
+.rank-window.hidden { display: none; }
+.rank-window .fw-header { border-radius: 10px 10px 0 0; }
+.rank-window .fw-body { padding: 12px 14px; }
+.rank-window .rank-legend {
+  margin-top: 10px;
+  border: none;
+  padding: 0;
+  background: transparent;
+}
+
 .hidden { display: none !important; }
 
 /* leaflet popup tweaks */
@@ -701,76 +725,6 @@ input[type="range"] { width: 100%; }
 .zone-sub.hidden { display: none; }
 
 .small-check { font-size: 11px; }
-
-/* ---------- 指標ツリー(配達プラン) ---------- */
-.indicator-tree {
-  max-height: 180px;
-  overflow-y: auto;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fff;
-  margin-bottom: 6px;
-}
-.indicator-cat-header {
-  padding: 6px 8px;
-  font-size: 12px;
-  font-weight: 700;
-  background: #eef1f5;
-  cursor: pointer;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.indicator-cat-header .not-provided-badge {
-  font-size: 9px;
-  font-weight: 400;
-  color: var(--text-muted);
-  background: #e4e6ea;
-  padding: 1px 5px;
-  border-radius: 8px;
-}
-.indicator-leaf-list { padding: 2px 8px 6px; }
-.indicator-leaf-list.collapsed { display: none; }
-.indicator-leaf-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 11.5px;
-  padding: 3px 4px;
-  border-radius: 4px;
-  cursor: pointer;
-}
-.indicator-leaf-row:hover { background: #f2f6fe; }
-.indicator-leaf-row i { color: var(--primary); }
-
-.indicator-selected-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 4px;
-}
-.indicator-selected-box {
-  min-height: 90px;
-  max-height: 150px;
-  overflow-y: auto;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fff;
-  padding: 4px;
-}
-.indicator-selected-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 12px;
-  padding: 5px 8px;
-  border-radius: 4px;
-  cursor: pointer;
-}
-.indicator-selected-row:hover { background: #f7f8fa; }
-.indicator-selected-row.active { background: var(--primary-light); }
-.indicator-selected-row i { color: var(--text-muted); cursor: pointer; }
-.indicator-selected-row i:hover { color: var(--danger); }
 
 /* ---------- 予算通数(配達プラン) ---------- */
 .budget-row {

@@ -8,6 +8,7 @@ const Panel = (() => {
   let currentShape = null;
   let cityUIBuilt = false;
   let prevSummary = null; // { deliverable, statHouseholds } — 直前の商圏サマリー(増減表示用)
+  let rankWindowManuallyClosed = false; // ランキングウィンドウをユーザーが閉じた場合、再表示を抑制する
 
   function escapeHtml(str) {
     return String(str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -62,6 +63,8 @@ const Panel = (() => {
       resultHouseholds: document.getElementById("result-households"),
       resultPopulation: document.getElementById("result-population"),
       rankLegend: document.getElementById("rank-legend"),
+      rankWindow: document.getElementById("rank-window"),
+      rankWindowClose: document.getElementById("rank-window-close"),
       fillOpacity: document.getElementById("fill-opacity"),
       fillOpacityVal: document.getElementById("fill-opacity-val"),
 
@@ -82,6 +85,8 @@ const Panel = (() => {
     wireMultiStoreOptions();
     wireConditionToggle();
     wireOpacitySlider();
+    wireRankWindow();
+    AppMap.setFillOpacity(Number(els.fillOpacity.value) / 100);
   }
 
   // ---------------- 透明度スライダー ----------------
@@ -91,6 +96,23 @@ const Panel = (() => {
       els.fillOpacityVal.textContent = `${pct}%`;
       AppMap.setFillOpacity(pct / 100);
     });
+  }
+
+  // ---------------- ランキングウィンドウ(地図内フロート表示) ----------------
+  function wireRankWindow() {
+    els.rankWindowClose.addEventListener("click", () => {
+      rankWindowManuallyClosed = true;
+      els.rankWindow.classList.add("hidden");
+    });
+  }
+
+  function showRankWindow() {
+    if (rankWindowManuallyClosed) return;
+    els.rankWindow.classList.remove("hidden");
+  }
+
+  function hideRankWindow() {
+    els.rankWindow.classList.add("hidden");
   }
 
   // ---------------- 商圏作成方法ボタン ----------------
@@ -379,7 +401,10 @@ const Panel = (() => {
 
   function onSelectionsChanged(fn) {
     els.segmentGroups.addEventListener("change", (e) => {
-      if (e.target.matches('input[type="checkbox"]')) fn(getSelections());
+      if (e.target.matches('input[type="checkbox"]')) {
+        rankWindowManuallyClosed = false;
+        fn(getSelections());
+      }
     });
   }
 
@@ -393,12 +418,14 @@ const Panel = (() => {
   function emitResultReset() {
     updateResult({ areas: 0, households: 0, population: 0 });
     updateZoneSummary([]);
+    rankWindowManuallyClosed = false;
     clearRankLegend();
   }
 
   function clearRankLegend() {
     els.rankLegend.classList.add("hidden");
     els.rankLegend.innerHTML = "";
+    hideRankWindow();
   }
 
   function formatLegendValue(v, format) {
@@ -424,6 +451,7 @@ const Panel = (() => {
     }
     els.rankLegend.innerHTML = `<div style="font-weight:700;margin-bottom:4px;">ランク別色分け</div>${rows.join("")}`;
     els.rankLegend.classList.remove("hidden");
+    showRankWindow();
   }
 
   /** 2軸(バイバリエート/クロス表示)のランク別色分け凡例を3×3の円グラフ風グリッドで表示する */
@@ -452,6 +480,7 @@ const Panel = (() => {
       <p class="hint small" style="margin-top:8px;">円の大きさ・数値は、表示中の商圏における統計上世帯数ベースの構成比(%)です。</p>
     `;
     els.rankLegend.classList.remove("hidden");
+    showRankWindow();
   }
 
   // ---------------- 商圏サマリー(サイドバー上部・配達可能箇所数/統計上世帯数) ----------------

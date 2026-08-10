@@ -194,17 +194,6 @@
         <label class="opt-label">カバー率(◯%以下)</label>
         <input type="number" id="coverage-rate" class="text-input" min="0" max="100" value="100">
         <p class="hint small">新聞購読データ等の実データが提供された場合のみ有効な任意機能です。現在はデモ選択のみで結果には反映されません。</p>
-
-        <div class="fw-section-bar">指標の指定</div>
-        <div id="indicator-tree" class="indicator-tree"></div>
-        <div class="indicator-selected-header">
-          <span>選択された指標</span>
-          <span>
-            <button id="indicator-down" class="icon-btn small" title="下へ"><i class="fa-solid fa-arrow-down"></i></button>
-            <button id="indicator-up" class="icon-btn small" title="上へ"><i class="fa-solid fa-arrow-up"></i></button>
-          </span>
-        </div>
-        <div id="indicator-selected" class="indicator-selected-box"></div>
       </section>
 
       <!-- 集計結果 -->
@@ -215,12 +204,6 @@
           <div class="result-row"><span>世帯数(概算)</span><strong id="result-households">0</strong></div>
           <div class="result-row"><span>人口(概算)</span><strong id="result-population">0</strong></div>
         </div>
-        <div class="opacity-row">
-          <span class="opacity-label">透明度</span>
-          <input type="range" id="fill-opacity" min="10" max="100" step="5" value="65">
-          <span id="fill-opacity-val" class="opacity-val">65%</span>
-        </div>
-        <div id="rank-legend" class="rank-legend hidden"></div>
       </section>
 
       <!-- ⑤ 予算通数の指定 -->
@@ -262,7 +245,7 @@
         <div id="detail-panel" class="hidden">
           <div class="detail-table-wrap">
             <table class="data-table">
-              <thead><tr><th>町丁目</th><th>世帯数</th><th>統計上世帯数</th><th>指標値</th></tr></thead>
+              <thead><tr><th>町丁目</th><th>世帯数</th><th>統計上世帯数</th></tr></thead>
               <tbody id="detail-table-body"></tbody>
             </table>
           </div>
@@ -310,6 +293,24 @@
     <div id="map"></div>
     <div id="map-loading" class="hidden">
       <i class="fa-solid fa-spinner fa-spin"></i>
+    </div>
+
+    <!-- 条件を選択した際に表示するランキング凡例ウィンドウ -->
+    <div id="rank-window" class="rank-window hidden">
+      <div class="fw-header">
+        <span><i class="fa-solid fa-ranking-star"></i> ランキング</span>
+        <span class="fw-header-actions">
+          <i class="fa-solid fa-xmark fw-close" id="rank-window-close" title="閉じる"></i>
+        </span>
+      </div>
+      <div class="fw-body">
+        <div class="opacity-row">
+          <span class="opacity-label">透明度</span>
+          <input type="range" id="fill-opacity" min="0" max="100" step="5" value="50">
+          <span id="fill-opacity-val" class="opacity-val">50%</span>
+        </div>
+        <div id="rank-legend" class="rank-legend"></div>
+      </div>
     </div>
   </main>
 

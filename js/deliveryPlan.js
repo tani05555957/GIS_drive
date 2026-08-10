@@ -3,7 +3,8 @@
  * 以下をそれぞれサイドバー/アプリ起動前の開始ゲートに統合する。
  * - ①作成方法の指定 → アプリ表示前の開始ゲート(#start-gate)
  * - ②商圏作成方法の指定 → サイドバー(js/panel.js の商圏作成方法セクション)
- * - ③新聞・④指標の指定 → サイドバー「条件を選択」パネルに統合
+ * - ③新聞の指定 → サイドバー「条件を選択」パネルに統合(④指標の指定は「条件を選択」の属性条件と
+ *   機能が重複するため廃止。実統計指標によるランキングは js/rankEngine.js が担う)
  * - ⑤予算通数の指定 → サイドバー独立セクション(分析開始・明細を含む)
  * - 逆引き分析・保存 → サイドバー独立ボタン
  * - レポート出力 → 既存の「レポート出力」ボタンに統合(main.js から exportReportBundle を呼ぶ)
@@ -18,8 +19,7 @@ const DeliveryPlan = (() => {
   const PLANS_KEY = "gd_delivery_plans_v1";
 
   let els = {};
-  let planState = { id: null, createdAt: null, indicators: [] };
-  let activeIndicatorIndex = -1;
+  let planState = { id: null, createdAt: null };
   let lastAnalysis = null; // { rows, allRows, totals, townCount }
   let selectedGatePlanId = null;
 
@@ -61,11 +61,6 @@ const DeliveryPlan = (() => {
       newspaperList: document.getElementById("newspaper-list"),
       coverageRate: document.getElementById("coverage-rate"),
 
-      indicatorTree: document.getElementById("indicator-tree"),
-      indicatorSelected: document.getElementById("indicator-selected"),
-      indicatorUp: document.getElementById("indicator-up"),
-      indicatorDown: document.getElementById("indicator-down"),
-
       budgetCount: document.getElementById("budget-count"),
       selectAllTowns: document.getElementById("select-all-towns"),
       budgetModeEstimate: document.getElementById("budget-mode-estimate"),
@@ -100,9 +95,7 @@ const DeliveryPlan = (() => {
     els.saveNameInput.value = defaultPlanName();
     els.gateNameInput.value = defaultPlanName();
 
-    renderIndicatorTree();
     renderNewspaperList();
-    wireIndicatorControls();
     wireActions();
     wireStartGate();
   }
@@ -175,86 +168,6 @@ const DeliveryPlan = (() => {
     els.newspaperList.innerHTML = (typeof SAMPLE_NEWSPAPERS !== "undefined" ? SAMPLE_NEWSPAPERS : [])
       .map((np) => `<label><input type="checkbox" class="np-check" value="${np.id}"> ${escapeHtml(np.name)}</label>`)
       .join("");
-  }
-
-  // ---------------- ④ 指標の指定 ----------------
-  function renderIndicatorTree() {
-    els.indicatorTree.innerHTML = STAT_INDICATOR_TREE.map(
-      (cat) => `
-      <div class="indicator-cat">
-        <div class="indicator-cat-header" data-cat="${cat.key}">
-          <span>${escapeHtml(cat.label)}</span>
-          ${cat.provided ? "" : '<span class="not-provided-badge">データ未提供</span>'}
-        </div>
-        <div class="indicator-leaf-list collapsed" data-cat-body="${cat.key}">
-          ${cat.leaves
-            .map(
-              (leaf) =>
-                `<div class="indicator-leaf-row" data-cat="${cat.key}" data-leaf="${leaf.key}"><span>${escapeHtml(
-                  leaf.label
-                )}</span><i class="fa-solid fa-plus"></i></div>`
-            )
-            .join("")}
-        </div>
-      </div>`
-    ).join("");
-
-    els.indicatorTree.querySelectorAll(".indicator-cat-header").forEach((h) => {
-      h.addEventListener("click", () => {
-        els.indicatorTree.querySelector(`[data-cat-body="${h.dataset.cat}"]`).classList.toggle("collapsed");
-      });
-    });
-    els.indicatorTree.querySelectorAll(".indicator-leaf-row").forEach((row) => {
-      row.addEventListener("click", () => addIndicator(row.dataset.cat, row.dataset.leaf));
-    });
-  }
-
-  function addIndicator(categoryKey, leafKey) {
-    const cat = STAT_INDICATOR_TREE.find((c) => c.key === categoryKey);
-    const leaf = cat.leaves.find((l) => l.key === leafKey);
-    if (planState.indicators.some((i) => i.categoryKey === categoryKey && i.leafKey === leafKey)) return;
-    planState.indicators.push({ categoryKey, leafKey, label: `${cat.label} / ${leaf.label}`, provided: cat.provided });
-    renderSelectedIndicators();
-  }
-
-  function renderSelectedIndicators() {
-    els.indicatorSelected.innerHTML = planState.indicators
-      .map(
-        (ind, i) => `
-      <div class="indicator-selected-row ${i === activeIndicatorIndex ? "active" : ""}" data-idx="${i}">
-        <span>${escapeHtml(ind.label)}${ind.provided ? "" : ' <span class="hint small">(データ未提供)</span>'}</span>
-        <i class="fa-solid fa-xmark" data-remove="${i}" title="削除"></i>
-      </div>`
-      )
-      .join("");
-    els.indicatorSelected.querySelectorAll(".indicator-selected-row").forEach((row) => {
-      row.addEventListener("click", () => {
-        activeIndicatorIndex = Number(row.dataset.idx);
-        renderSelectedIndicators();
-      });
-    });
-    els.indicatorSelected.querySelectorAll("[data-remove]").forEach((el) => {
-      el.addEventListener("click", (e) => {
-        e.stopPropagation();
-        planState.indicators.splice(Number(el.dataset.remove), 1);
-        activeIndicatorIndex = -1;
-        renderSelectedIndicators();
-      });
-    });
-  }
-
-  function wireIndicatorControls() {
-    els.indicatorUp.addEventListener("click", () => moveIndicator(-1));
-    els.indicatorDown.addEventListener("click", () => moveIndicator(1));
-  }
-  function moveIndicator(delta) {
-    if (activeIndicatorIndex < 0) return;
-    const newIndex = activeIndicatorIndex + delta;
-    if (newIndex < 0 || newIndex >= planState.indicators.length) return;
-    const [item] = planState.indicators.splice(activeIndicatorIndex, 1);
-    planState.indicators.splice(newIndex, 0, item);
-    activeIndicatorIndex = newIndex;
-    renderSelectedIndicators();
   }
 
   // ---------------- ⑤ 予算通数・分析ロジック ----------------
@@ -365,16 +278,6 @@ const DeliveryPlan = (() => {
     els.detailToggleBtn.textContent = "明細を隠す";
   }
 
-  function detailIndicatorText(f) {
-    if (planState.indicators.length === 0) return "-";
-    return planState.indicators
-      .map((ind) => {
-        const v = DataStore.getIndicatorValue(f, ind.categoryKey, ind.leafKey);
-        return `${ind.label}: ${v == null ? "データ未提供" : Math.round(v).toLocaleString()}`;
-      })
-      .join(" / ");
-  }
-
   function renderDetailTable() {
     els.detailTableBody.innerHTML = lastAnalysis.rows
       .map((r) => {
@@ -384,7 +287,6 @@ const DeliveryPlan = (() => {
           <td>${escapeHtml(name)}</td>
           <td>${Math.round(r.households).toLocaleString()}</td>
           <td>${Math.round(r.statisticalHouseholds).toLocaleString()}</td>
-          <td>${escapeHtml(detailIndicatorText(f))}</td>
         </tr>`;
       })
       .join("");
@@ -408,16 +310,12 @@ const DeliveryPlan = (() => {
       alert("先に「分析開始」を実行してください");
       return;
     }
-    const header = ["町丁目", "KEY_CODE", "世帯数", "統計上世帯数", ...planState.indicators.map((i) => i.label)];
+    const header = ["町丁目", "KEY_CODE", "世帯数", "統計上世帯数"];
     const lines = [header.map(csvEscape).join(",")];
     lastAnalysis.rows.forEach((r) => {
       const f = r.feature;
       const name = [f.properties?.CITY_NAME, f.properties?.S_NAME].filter(Boolean).join(" ");
       const cells = [name, f.properties?.KEY_CODE, Math.round(r.households), Math.round(r.statisticalHouseholds)];
-      planState.indicators.forEach((ind) => {
-        const v = DataStore.getIndicatorValue(f, ind.categoryKey, ind.leafKey);
-        cells.push(v == null ? "" : Math.round(v));
-      });
       lines.push(cells.map(csvEscape).join(","));
     });
     downloadCsv(lines.join("\n"), `配達プラン明細_${tsCompact()}.csv`);
@@ -446,7 +344,6 @@ const DeliveryPlan = (() => {
       multiRadius: Panel.getMultiStoreRadius(),
       newspapers: Array.from(els.newspaperList.querySelectorAll(".np-check:checked")).map((cb) => cb.value),
       coverageRate: Number(els.coverageRate.value) || 100,
-      indicators: planState.indicators,
       budget: {
         count: Number(els.budgetCount.value) || 0,
         selectAll: els.selectAllTowns.checked,
@@ -522,10 +419,6 @@ const DeliveryPlan = (() => {
     });
     els.coverageRate.value = state.coverageRate ?? 100;
 
-    planState.indicators = (state.indicators || []).slice();
-    activeIndicatorIndex = -1;
-    renderSelectedIndicators();
-
     els.budgetCount.value = state.budget?.count ?? 10000;
     els.selectAllTowns.checked = !!state.budget?.selectAll;
     els.excludeZero.checked = state.budget?.excludeZero !== false;
@@ -556,9 +449,6 @@ const DeliveryPlan = (() => {
   }
 
   function reset() {
-    planState.indicators = [];
-    activeIndicatorIndex = -1;
-    renderSelectedIndicators();
     els.newspaperList.querySelectorAll(".np-check").forEach((cb) => (cb.checked = false));
     els.coverageRate.value = 100;
     els.budgetCount.value = 10000;
