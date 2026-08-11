@@ -35,6 +35,10 @@ const Panel = (() => {
       optMultiStore: document.getElementById("opt-multistore"),
       trainStatus: document.getElementById("train-status"),
 
+      originPointsInfo: document.getElementById("origin-points-info"),
+      originPointsCount: document.getElementById("origin-points-count"),
+      originPointsClear: document.getElementById("origin-points-clear"),
+
       cityPrefSelect: document.getElementById("city-pref-select"),
       cityChecklist: document.getElementById("city-checklist"),
 
@@ -86,6 +90,11 @@ const Panel = (() => {
     wireConditionToggle();
     wireOpacitySlider();
     wireRankWindow();
+    wireOriginPoints();
+    wireCityMapClick();
+    wireReverseLookup("circle");
+    wireReverseLookup("time");
+    wireReverseLookup("train");
     AppMap.setFillOpacity(Number(els.fillOpacity.value) / 100);
   }
 
@@ -171,6 +180,16 @@ const Panel = (() => {
     return currentShape;
   }
 
+  // ---------------- 起点ポイント(円・所要時間・電車で共通、方法選択前から地図クリックで指定可能) ----------------
+  function wireOriginPoints() {
+    AppMap.on("originPointsChanged", (points) => {
+      const count = points.length;
+      els.originPointsInfo.classList.toggle("hidden", count === 0);
+      els.originPointsCount.textContent = String(count);
+    });
+    els.originPointsClear.addEventListener("click", () => AppMap.clearOriginPoints());
+  }
+
   // ---------------- 起点店舗セレクト(円・電車・所要時間で共通) ----------------
   function populateStoreDropdown(selectEl) {
     const stores = StoreManager.getStores();
@@ -209,9 +228,15 @@ const Panel = (() => {
   function renderCityChecklist() {
     const entries = BoundaryLoader.getMunicipalityIndex();
     const pref = els.cityPrefSelect.value;
+    const selected = AppMap.getCitySelection();
     const cities = entries.filter((e) => e.pref === pref).sort((a, b) => a.code.localeCompare(b.code));
     els.cityChecklist.innerHTML = cities
-      .map((c) => `<label><input type="checkbox" class="city-check" value="${c.code}"> ${escapeHtml(c.name)}</label>`)
+      .map(
+        (c) =>
+          `<label><input type="checkbox" class="city-check" value="${c.code}" ${
+            selected.has(c.code) ? "checked" : ""
+          }> ${escapeHtml(c.name)}</label>`
+      )
       .join("");
     els.cityChecklist.querySelectorAll(".city-check").forEach((cb) => cb.addEventListener("change", onCityCheckChange));
   }
@@ -223,6 +248,38 @@ const Panel = (() => {
 
   function getCheckedCityCodes() {
     return Array.from(els.cityChecklist.querySelectorAll(".city-check:checked")).map((cb) => cb.value);
+  }
+
+  /** 地図クリック(cityBoundaryClick/cityPointClick)による市区町村の選択・解除を適用する */
+  function applyCitySelectionFromMap(cityCode, shiftKey) {
+    const current = AppMap.getCitySelection();
+    let next;
+    if (shiftKey) {
+      next = new Set(current);
+      if (next.has(cityCode)) next.delete(cityCode);
+      else next.add(cityCode);
+    } else {
+      next = new Set([cityCode]);
+    }
+    AppMap.setCitySelection(Array.from(next));
+
+    const entry = BoundaryLoader.getMunicipalityIndex().find((e) => e.code === cityCode);
+    if (entry && els.cityPrefSelect.value !== entry.pref) els.cityPrefSelect.value = entry.pref;
+    renderCityChecklist();
+  }
+
+  /** 「市区町村」モード時、地図クリックで市区町村を選択できるようにする(Shift+クリックで複数選択) */
+  function wireCityMapClick() {
+    AppMap.on("cityBoundaryClick", ({ cityCode, shiftKey }) => {
+      if (currentShape !== "city") return;
+      applyCitySelectionFromMap(cityCode, shiftKey);
+    });
+    AppMap.on("cityPointClick", async ({ latlng, shiftKey }) => {
+      if (currentShape !== "city") return;
+      const entry = await BoundaryLoader.findMunicipalityAtPoint(latlng.lat, latlng.lng);
+      if (!entry) return;
+      applyCitySelectionFromMap(entry.code, shiftKey);
+    });
   }
 
   // ---------------- 円 ----------------
@@ -273,8 +330,53 @@ const Panel = (() => {
     });
     els.orsApiKey.addEventListener("change", rebuildTimeShape);
 
-    AppMap.on("timeOriginSet", rebuildTimeShape);
     wireOriginStoreSelect(els.timeOriginStore);
+  }
+
+  // ---------------- 逆引き(円・所要時間・電車で共通) ----------------
+  /**
+   * 配達可能箇所数/統計上世帯数の目標値から、起点に近い町丁目を組み合わせて範囲を決定する。
+   * 半径・所要時間・起点の指定とは別に、対象町丁目を直接算出して商圏として反映する。
+   */
+  function wireReverseLookup(prefix) {
+    const metricSeg = document.getElementById(`${prefix}-reverse-metric`);
+    const targetInput = document.getElementById(`${prefix}-reverse-target`);
+    const btn = document.getElementById(`${prefix}-reverse-btn`);
+    const status = document.getElementById(`${prefix}-reverse-status`);
+    let metric = "deliverable";
+
+    metricSeg.querySelectorAll(".seg-btn").forEach((b) => {
+      b.addEventListener("click", () => {
+        metric = b.dataset.metric;
+        metricSeg.querySelectorAll(".seg-btn").forEach((x) => x.classList.toggle("active", x === b));
+      });
+    });
+
+    btn.addEventListener("click", async () => {
+      const target = Number(targetInput.value);
+      if (!target || target <= 0) {
+        status.textContent = "目標値を入力してください";
+        return;
+      }
+      const points = AppMap.getOriginPoints();
+      if (points.length === 0) {
+        status.textContent = "先に地図上でポイントを指定してください";
+        return;
+      }
+      status.textContent = "計算中…";
+      btn.disabled = true;
+      try {
+        const result = await ReverseLookup.forPoints(points, target, metric);
+        AppMap.applyReverseLookupResult(result.features);
+        status.textContent = result.allReached
+          ? `${result.features.length.toLocaleString()} 町丁目を組み合わせました`
+          : `${result.features.length.toLocaleString()} 町丁目を組み合わせましたが、探索範囲内で目標値に届きませんでした`;
+      } catch (err) {
+        status.textContent = `エラー: ${err.message}`;
+      } finally {
+        btn.disabled = false;
+      }
+    });
   }
 
   // ---------------- 任意商圏(自由描画) ----------------
@@ -547,6 +649,7 @@ const Panel = (() => {
   function wireReset(onReset) {
     els.resetBtn.addEventListener("click", () => {
       selectShape(null);
+      AppMap.clearOriginPoints();
       els.searchInput.value = "";
       els.searchResults.classList.add("hidden");
       els.orsApiKey.value = "";

@@ -126,7 +126,6 @@ const StoreManager = (() => {
     renderStoreTable();
     renderGroupTable();
 
-    document.getElementById("open-store-mgr-btn").addEventListener("click", open);
     document.getElementById("header-store-btn").addEventListener("click", open);
   }
 

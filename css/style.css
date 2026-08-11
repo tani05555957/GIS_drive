@@ -34,7 +34,7 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
-  background: linear-gradient(180deg, var(--primary) 0%, var(--primary-dark) 100%);
+  background: var(--primary);
   color: #fff;
   box-shadow: 0 2px 6px rgba(0,0,0,.18);
   z-index: 500;
@@ -523,6 +523,8 @@ input[type="range"] { width: 100%; }
 .hidden { display: none !important; }
 
 /* leaflet popup tweaks */
+/* 町丁目ポリゴンをクリックした際、ブラウザ既定のフォーカス枠(黒い矩形)が表示されるのを防ぐ */
+.leaflet-interactive:focus { outline: none; }
 .leaflet-popup-content { font-size: 12.5px; }
 .area-tooltip {
   background: #fff;
@@ -591,7 +593,7 @@ input[type="range"] { width: 100%; }
 }
 
 .fw-header {
-  background: linear-gradient(180deg, var(--primary) 0%, var(--primary-dark) 100%);
+  background: var(--primary);
   color: #fff;
   padding: 10px 14px;
   display: flex;
@@ -723,6 +725,20 @@ input[type="range"] { width: 100%; }
   border-radius: 8px;
 }
 .zone-sub.hidden { display: none; }
+
+/* ---------- 起点ポイント表示(商圏作成方法の指定) ---------- */
+.origin-points-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+.origin-points-row .btn-text {
+  width: auto;
+  padding: 2px 8px;
+  margin: 0;
+}
 
 .small-check { font-size: 11px; }
 

@@ -100,11 +100,67 @@ const BoundaryLoader = (() => {
     return index;
   }
 
+  /**
+   * 指定した地点(緯度経度)を含む市区町村を返す(「市区町村」モードの地図クリック選択用)。
+   * bboxで候補を絞り込んだ上で、実際の町丁目ポリゴンに対し点包含判定を行うことで、
+   * 外部ジオコーディングAPIに頼らずオフラインで市区町村を特定する。該当が無ければ null。
+   */
+  async function findMunicipalityAtPoint(lat, lon) {
+    await loadIndex();
+    const pt = turf.point([lon, lat]);
+    const candidates = index.filter(
+      (e) => lon >= e.bbox[0] && lon <= e.bbox[2] && lat >= e.bbox[1] && lat <= e.bbox[3]
+    );
+    for (const entry of candidates) {
+      const features = await loadMunicipality(entry);
+      const hit = features.some((f) => {
+        try {
+          return turf.booleanPointInPolygon(pt, f);
+        } catch (e) {
+          return false;
+        }
+      });
+      if (hit) return entry;
+    }
+    return null;
+  }
+
+  /**
+   * 指定地点から半径を徐々に広げながら候補の町丁目featureを収集する(逆引き分析用)。
+   * 最小候補数に達するか、最大半径・市区町村数上限に達した時点で打ち切る。
+   */
+  async function getFeaturesNearPoint(lat, lon, opts = {}) {
+    await loadIndex();
+    const startRadiusM = opts.startRadiusM || 1000;
+    const maxRadiusM = opts.maxRadiusM || 25000;
+    const minCandidates = opts.minCandidates || 40;
+    const maxMunicipalities = opts.maxMunicipalities || 30;
+
+    let radius = startRadiusM;
+    const collected = new Map();
+    let tooBroad = false;
+    while (radius <= maxRadiusM) {
+      const shape = turf.circle([lon, lat], radius / 1000, { steps: 48, units: "kilometers" });
+      const bbox = turf.bbox(shape);
+      const result = await getFeaturesInBbox(bbox, maxMunicipalities);
+      if (result.tooBroad) {
+        tooBroad = true;
+        break;
+      }
+      result.features.forEach((f) => collected.set(f.properties.KEY_CODE, f));
+      if (collected.size >= minCandidates) break;
+      radius *= 1.7;
+    }
+    return { features: Array.from(collected.values()), reachedMax: radius > maxRadiusM, tooBroad };
+  }
+
   return {
     loadIndex,
     getFeaturesInBbox,
     getFeaturesIntersectingShape,
     getFeaturesForMunicipalities,
     getMunicipalityIndex,
+    findMunicipalityAtPoint,
+    getFeaturesNearPoint,
   };
 })();

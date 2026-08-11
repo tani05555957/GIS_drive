@@ -8,9 +8,14 @@ const AppMap = (() => {
   let searchMarker = null;
 
   // --- 商圏図形の状態 ---
-  let mode = null; // 'circle' | 'polygon' | 'time' | 'area' | null
-  let circleLayer = null;
-  let circleCenter = null;
+  let mode = null; // 'circle' | 'polygon' | 'time' | 'train' | 'area' | 'city' | 'multiStore' | null
+
+  // --- 起点ポイント(円・所要時間・電車で共通、商圏作成方法の指定前からマップクリックで設定可能) ---
+  let originPoints = []; // L.LatLng[]
+  let originMarkersLayer = null;
+
+  let circleLayersGroup = null;
+  let circleGeojsons = []; // originPoints と対応する turf.circle の配列
   let circleRadiusM = 500;
 
   let polygonPoints = [];
@@ -18,13 +23,12 @@ const AppMap = (() => {
   let polygonVertexLayer = null;
   let polygonFinal = null;
 
-  let timeOrigin = null;
-  let timeLayer = null;
-  let timeShapeGeoJson = null; // 所要時間モードの実ジオメトリ(交差判定用)
+  let timeLayersGroup = null;
+  let timeGeojsons = []; // 所要時間モードの実ジオメトリ配列(交差判定用)
+  let lastTimeParams = { apiKey: "", mode: "walk", minutes: 10 };
 
-  let trainOrigin = null;
-  let trainLayer = null;
-  let trainShapeGeoJson = null; // 電車商圏モードの実ジオメトリ(交差判定用)
+  let trainLayersGroup = null;
+  let trainGeojsons = []; // 電車商圏モードの実ジオメトリ配列(交差判定用)
 
   let selectedCityCodes = new Set(); // 「市区町村」モードでの選択(市区町村コード)
   let selectedMultiStoreIds = new Set(); // 「多店舗分析」モードでの選択(店舗ID)
@@ -86,6 +90,11 @@ const AppMap = (() => {
     storeCirclesLayer = L.layerGroup().addTo(map);
     storeMarkersLayer = L.layerGroup().addTo(map);
 
+    originMarkersLayer = L.layerGroup().addTo(map);
+    circleLayersGroup = L.layerGroup().addTo(map);
+    timeLayersGroup = L.layerGroup().addTo(map);
+    trainLayersGroup = L.layerGroup().addTo(map);
+
     return map;
   }
 
@@ -125,33 +134,38 @@ const AppMap = (() => {
   }
 
   // ---------------- モード管理 ----------------
+  /**
+   * 商圏作成方法を切り替える。円/時間/電車のジオメトリ・任意商圏・地域/市区町村/多店舗の選択状態はクリアするが、
+   * 起点ポイント(originPoints)はモードをまたいで保持する(同じポイントを別の作成方法でも使い回せるようにするため)。
+   */
   function setMode(newMode) {
     mode = newMode;
     clearShape();
+    if ((mode === "circle" || mode === "time" || mode === "train") && originPoints.length > 0) {
+      rebuildActiveOriginShape();
+    } else {
+      emit("shapeCleared");
+    }
   }
 
   function clearShape() {
-    if (circleLayer) { map.removeLayer(circleLayer); circleLayer = null; }
-    circleCenter = null;
+    circleLayersGroup.clearLayers();
+    circleGeojsons = [];
 
     if (polygonLine) { map.removeLayer(polygonLine); polygonLine = null; }
     if (polygonVertexLayer) { map.removeLayer(polygonVertexLayer); polygonVertexLayer = null; }
     if (polygonFinal) { map.removeLayer(polygonFinal); polygonFinal = null; }
     polygonPoints = [];
 
-    if (timeLayer) { map.removeLayer(timeLayer); timeLayer = null; }
-    timeOrigin = null;
-    timeShapeGeoJson = null;
+    timeLayersGroup.clearLayers();
+    timeGeojsons = [];
 
-    if (trainLayer) { map.removeLayer(trainLayer); trainLayer = null; }
-    trainOrigin = null;
-    trainShapeGeoJson = null;
+    trainLayersGroup.clearLayers();
+    trainGeojsons = [];
 
     selectedAreaKeyCodes.clear();
     selectedCityCodes.clear();
     selectedMultiStoreIds.clear();
-
-    emit("shapeCleared");
   }
 
   function clearAreaSelection() {
@@ -165,6 +179,10 @@ const AppMap = (() => {
     emit("citySelectionChanged", getCurrentShapeInfo());
   }
 
+  function getCitySelection() {
+    return new Set(selectedCityCodes);
+  }
+
   /** 「多店舗分析」モード: 選択された店舗IDの一覧を設定する(featureの取得・描画は呼び出し側が行う) */
   function setMultiStoreSelection(ids) {
     selectedMultiStoreIds = new Set(ids);
@@ -173,10 +191,7 @@ const AppMap = (() => {
 
   function setCircleRadius(meters) {
     circleRadiusM = meters;
-    if (circleLayer && circleCenter) {
-      circleLayer.setRadius(meters);
-      emit("shapeUpdated", getCurrentShapeInfo());
-    }
+    if (mode === "circle") rebuildCircles();
   }
 
   function undoPolygonPoint() {
@@ -185,33 +200,73 @@ const AppMap = (() => {
     redrawPolygonDraft();
   }
 
+  // ---------------- 起点ポイント(円・所要時間・電車で共通) ----------------
+  function redrawOriginMarkers() {
+    originMarkersLayer.clearLayers();
+    const showNumbers = originPoints.length > 1;
+    originPoints.forEach((p, i) => {
+      const marker = L.circleMarker(p, { radius: 6, weight: 2, color: "#1a73e8", fillColor: "#fff", fillOpacity: 1 });
+      if (showNumbers) marker.bindTooltip(String(i + 1), { permanent: true, direction: "top", className: "area-tooltip" });
+      marker.addTo(originMarkersLayer);
+    });
+  }
+
+  function rebuildActiveOriginShape() {
+    if (mode === "circle") rebuildCircles();
+    else if (mode === "time") buildTimeShape(lastTimeParams.apiKey, lastTimeParams.mode, lastTimeParams.minutes);
+    else if (mode === "train") buildTrainShape();
+  }
+
+  function clearOriginShapes() {
+    circleLayersGroup.clearLayers();
+    circleGeojsons = [];
+    timeLayersGroup.clearLayers();
+    timeGeojsons = [];
+    trainLayersGroup.clearLayers();
+    trainGeojsons = [];
+  }
+
+  /** 起点ポイントを置き換える(通常クリック・店舗選択で使用) */
+  function setOriginPoints(latlngs) {
+    originPoints = latlngs.slice();
+    redrawOriginMarkers();
+    if (originPoints.length === 0) clearOriginShapes();
+    else rebuildActiveOriginShape();
+    emit("originPointsChanged", getOriginPoints());
+  }
+
+  /** 起点ポイントを追加する(Shift+クリックで使用) */
+  function addOriginPoint(latlng) {
+    originPoints.push(latlng);
+    redrawOriginMarkers();
+    rebuildActiveOriginShape();
+    emit("originPointsChanged", getOriginPoints());
+  }
+
+  function clearOriginPoints() {
+    originPoints = [];
+    redrawOriginMarkers();
+    clearOriginShapes();
+    emit("originPointsChanged", getOriginPoints());
+  }
+
+  function getOriginPoints() {
+    return originPoints.map((p) => ({ lat: p.lat, lng: p.lng }));
+  }
+
+  /**
+   * 地図をクリックしたのと同じ効果で起点を設定する(店舗を起点に選んだ場合などに利用)。
+   * 通常クリックと同様、既存の起点ポイントをすべて置き換える。
+   */
+  function setOriginPoint(latlng) {
+    setOriginPoints([latlng]);
+  }
+
   // ---------------- 地図クリック処理 ----------------
-  function placeCircleOrigin(latlng) {
-    circleCenter = latlng;
-    if (circleLayer) map.removeLayer(circleLayer);
-    circleLayer = L.circle(circleCenter, {
-      radius: circleRadiusM,
-      color: "#1a73e8",
-      weight: 2,
-      fillOpacity: 0.15,
-    }).addTo(map);
-    emit("shapeUpdated", getCurrentShapeInfo());
-  }
-
-  function placeTimeOrigin(latlng) {
-    timeOrigin = latlng;
-    emit("timeOriginSet");
-  }
-
-  function placeTrainOrigin(latlng) {
-    trainOrigin = latlng;
-    buildTrainShape();
-  }
-
   function onMapClick(e) {
-    if (mode === "circle") {
-      placeCircleOrigin(e.latlng);
-    } else if (mode === "polygon") {
+    // 店舗位置指定など、単発クリック待ち(enableOneShotPlacement)が有効な間は商圏系のクリック処理を行わない
+    if (oneShotClickHandler) return;
+    if (mode === "polygon") {
       if (polygonFinal) return; // 確定済みなら追加不可(リセットしてから)
       if (polygonPoints.length >= 3) {
         const first = polygonPoints[0];
@@ -223,21 +278,13 @@ const AppMap = (() => {
       }
       polygonPoints.push(e.latlng);
       redrawPolygonDraft();
-    } else if (mode === "time") {
-      placeTimeOrigin(e.latlng);
-    } else if (mode === "train") {
-      placeTrainOrigin(e.latlng);
+    } else if (mode === "city") {
+      emit("cityPointClick", { latlng: e.latlng, shiftKey: !!e.originalEvent?.shiftKey });
+    } else if (mode === "circle" || mode === "time" || mode === "train" || mode === null) {
+      // 商圏作成方法を選ぶ前でもポイントを配置できるようにする(mode === null を含む)
+      if (e.originalEvent?.shiftKey) addOriginPoint(e.latlng);
+      else setOriginPoints([e.latlng]);
     }
-  }
-
-  /**
-   * 地図をクリックしたのと同じ効果で起点を設定する(店舗を起点に選んだ場合などに利用)。
-   * 現在のモードが circle/time/train でなければ何もしない。
-   */
-  function setOriginPoint(latlng) {
-    if (mode === "circle") placeCircleOrigin(latlng);
-    else if (mode === "time") placeTimeOrigin(latlng);
-    else if (mode === "train") placeTrainOrigin(latlng);
   }
 
   function redrawPolygonDraft() {
@@ -265,37 +312,57 @@ const AppMap = (() => {
     }
   }
 
-  async function buildTimeShape(apiKey = "", travelMode = "walk", minutes = 10) {
-    if (!timeOrigin) return;
-    if (timeLayer) { map.removeLayer(timeLayer); timeLayer = null; }
-    timeShapeGeoJson = await ShapeBuilders.time({
-      lat: timeOrigin.lat,
-      lon: timeOrigin.lng,
-      mode: travelMode,
-      minutes,
-      apiKey,
+  /** 起点ポイント全点に対して円を再構築する */
+  function rebuildCircles() {
+    circleLayersGroup.clearLayers();
+    circleGeojsons = originPoints.map((p) => turf.circle([p.lng, p.lat], circleRadiusM / 1000, { steps: 64, units: "kilometers" }));
+    circleGeojsons.forEach((gj) => {
+      L.geoJSON(gj, { style: { color: "#1a73e8", weight: 2, fillOpacity: 0.15 } }).addTo(circleLayersGroup);
     });
-    const approx = !!timeShapeGeoJson.properties?.approx;
-    timeLayer = L.geoJSON(timeShapeGeoJson, {
-      style: { color: "#e37400", weight: 2, dashArray: approx ? "6,4" : null, fillOpacity: 0.15 },
-    }).addTo(map);
     emit("shapeUpdated", getCurrentShapeInfo());
   }
 
-  /** 電車商圏モード: Overpassで最寄り駅を検索し、徒歩圏+概算鉄道到達圏を描画する */
+  /** 起点ポイント全点に対して所要時間圏を再構築する(同一条件で複数商圏を同時作成) */
+  async function buildTimeShape(apiKey = "", travelMode = "walk", minutes = 10) {
+    lastTimeParams = { apiKey, mode: travelMode, minutes };
+    if (originPoints.length === 0) {
+      timeLayersGroup.clearLayers();
+      timeGeojsons = [];
+      return;
+    }
+    const results = await Promise.all(
+      originPoints.map((p) => ShapeBuilders.time({ lat: p.lat, lon: p.lng, mode: travelMode, minutes, apiKey }))
+    );
+    timeGeojsons = results;
+    timeLayersGroup.clearLayers();
+    results.forEach((gj) => {
+      const approx = !!gj.properties?.approx;
+      L.geoJSON(gj, {
+        style: { color: "#e37400", weight: 2, dashArray: approx ? "6,4" : null, fillOpacity: 0.15 },
+      }).addTo(timeLayersGroup);
+    });
+    emit("shapeUpdated", getCurrentShapeInfo());
+  }
+
+  /** 電車商圏モード: 起点ポイント全点についてOverpassで最寄り駅を検索し、徒歩圏+概算鉄道到達圏を描画する */
   async function buildTrainShape() {
-    if (!trainOrigin) return;
-    if (trainLayer) { map.removeLayer(trainLayer); trainLayer = null; }
-    trainShapeGeoJson = null;
+    if (originPoints.length === 0) {
+      trainLayersGroup.clearLayers();
+      trainGeojsons = [];
+      return;
+    }
     emit("trainLoading");
 
-    const gj = await ShapeBuilders.train({ lat: trainOrigin.lat, lon: trainOrigin.lng });
-    trainShapeGeoJson = gj;
-    trainLayer = L.geoJSON(gj, {
-      style: { color: "#8e44ad", weight: 2, dashArray: gj.properties?.fallback ? "6,4" : null, fillOpacity: 0.15 },
-    }).addTo(map);
+    const results = await Promise.all(originPoints.map((p) => ShapeBuilders.train({ lat: p.lat, lon: p.lng })));
+    trainGeojsons = results;
+    trainLayersGroup.clearLayers();
+    results.forEach((gj) => {
+      L.geoJSON(gj, {
+        style: { color: "#8e44ad", weight: 2, dashArray: gj.properties?.fallback ? "6,4" : null, fillOpacity: 0.15 },
+      }).addTo(trainLayersGroup);
+    });
     emit("shapeUpdated", getCurrentShapeInfo());
-    emit("trainShapeReady", gj.properties);
+    emit("trainShapeReady", results[results.length - 1]?.properties);
   }
 
   // ---------------- 町丁目・字境界レイヤー ----------------
@@ -313,11 +380,17 @@ const AppMap = (() => {
       const name = [feature.properties?.CITY_NAME, feature.properties?.S_NAME].filter(Boolean).join(" ");
       if (name) layer.bindTooltip(name, { sticky: true, className: "area-tooltip" });
       layer.on("click", (e) => {
-        L.DomEvent.stopPropagation(e);
+        // area/city モード以外(circle/time/train等)では、ポリゴン上のクリックも起点ポイント配置に
+        // 使えるよう、ここではイベントを止めずに地図クリックへ伝播させる。
         if (mode === "area" && key) {
+          L.DomEvent.stopPropagation(e);
           if (selectedAreaKeyCodes.has(key)) selectedAreaKeyCodes.delete(key);
           else selectedAreaKeyCodes.add(key);
           emit("areaSelectionChanged", getCurrentShapeInfo());
+        } else if (mode === "city") {
+          L.DomEvent.stopPropagation(e);
+          const cityCode = (feature.properties?.PREF || "") + (feature.properties?.CITY || "");
+          if (cityCode) emit("cityBoundaryClick", { cityCode, shiftKey: !!e.originalEvent?.shiftKey });
         }
       });
       layer.addTo(boundaryLayerGroup);
@@ -368,19 +441,18 @@ const AppMap = (() => {
 
   // ---------------- 現在の図形情報取得 ----------------
   function getCurrentShapeInfo() {
-    if (mode === "circle" && circleCenter) {
-      const gj = turf.circle([circleCenter.lng, circleCenter.lat], circleRadiusM / 1000, { steps: 64, units: "kilometers" });
-      return { mode, geojson: gj };
+    if (mode === "circle") {
+      return { mode, geojsonList: circleGeojsons.slice() };
     }
     if (mode === "polygon" && polygonFinal) {
       const gj = polygonFinal.toGeoJSON();
       return { mode, geojson: gj };
     }
-    if (mode === "time" && timeShapeGeoJson) {
-      return { mode, geojson: timeShapeGeoJson };
+    if (mode === "time") {
+      return { mode, geojsonList: timeGeojsons.slice() };
     }
-    if (mode === "train" && trainShapeGeoJson) {
-      return { mode, geojson: trainShapeGeoJson };
+    if (mode === "train") {
+      return { mode, geojsonList: trainGeojsons.slice() };
     }
     if (mode === "area") {
       return { mode, selectedKeyCodes: Array.from(selectedAreaKeyCodes) };
@@ -399,6 +471,7 @@ const AppMap = (() => {
     if (info.mode === "area") return info.selectedKeyCodes.length > 0;
     if (info.mode === "city") return info.selectedCityCodes.length > 0;
     if (info.mode === "multiStore") return info.selectedStoreIds.length > 0;
+    if (info.mode === "circle" || info.mode === "time" || info.mode === "train") return (info.geojsonList || []).length > 0;
     return !!info.geojson;
   }
 
@@ -410,6 +483,16 @@ const AppMap = (() => {
       return renderedFeatures.filter((f) => selected.has(f.properties?.KEY_CODE));
     }
     return renderedFeatures;
+  }
+
+  /**
+   * 逆引き分析(ReverseLookup)の結果を、現在の商圏として直接反映する。
+   * 通常の図形(円/所要時間/電車)交差判定を経由せず、算出済みのfeature一覧をそのまま表示・集計対象にする。
+   * ユーザーが半径・起点等を変更すれば、通常のshapeUpdatedフローで自動的に上書きされる。
+   */
+  function applyReverseLookupResult(features) {
+    renderBoundaryFeatures(features);
+    emit("reverseLookupApplied", features.length);
   }
 
   // ---------------- 店舗管理レイヤー(新規) ----------------
@@ -471,9 +554,14 @@ const AppMap = (() => {
     clearShape,
     clearAreaSelection,
     setCitySelection,
+    getCitySelection,
     setMultiStoreSelection,
     setCircleRadius,
     setOriginPoint,
+    setOriginPoints,
+    addOriginPoint,
+    clearOriginPoints,
+    getOriginPoints,
     undoPolygonPoint,
     onDoubleClickFinishPolygon,
     buildTimeShape,
@@ -482,6 +570,7 @@ const AppMap = (() => {
     getBoundaryFeatures,
     getActiveFeatures,
     applyBoundaryColors,
+    applyReverseLookupResult,
     setFillOpacity,
     getCurrentShapeInfo,
     isShapeReady,

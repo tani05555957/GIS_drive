@@ -30,6 +30,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let boundaryRequestId = 0;
 
+  /**
+   * 複数の図形(円・所要時間・電車の各ポイント、多店舗分析の各店舗)それぞれについて交差する
+   * 町丁目・字featureを取得し、KEY_CODEで重複排除しつつ統合する(同一条件で複数商圏を作成する場合に使用)。
+   */
+  async function unionFeaturesForShapes(shapes) {
+    const seen = new Map();
+    let anyTooBroad = false;
+    for (const shape of shapes) {
+      const result = await BoundaryLoader.getFeaturesIntersectingShape(shape);
+      if (result.tooBroad) {
+        anyTooBroad = true;
+        continue;
+      }
+      result.features.forEach((f) => seen.set(f.properties.KEY_CODE, f));
+    }
+    return { features: Array.from(seen.values()), anyTooBroad };
+  }
+
   /** 現在の商圏作成方法の範囲に応じて、必要な町丁目・字境界だけを読み込んで描画する */
   async function refreshBoundaries() {
     const info = AppMap.getCurrentShapeInfo();
@@ -66,23 +84,32 @@ document.addEventListener("DOMContentLoaded", () => {
       } else {
         Panel.setBoundaryStatus("町丁目境界を読み込み中…");
         const radius = Panel.getMultiStoreRadius();
-        const seen = new Map();
-        let anyTooBroad = false;
-        for (const id of info.selectedStoreIds) {
-          const store = StoreManager.getStoreById(id);
-          if (!store) continue;
-          const shape = ShapeBuilders.circle(store.lat, store.lon, radius);
-          const result = await BoundaryLoader.getFeaturesIntersectingShape(shape);
-          if (result.tooBroad) { anyTooBroad = true; continue; }
-          result.features.forEach((f) => seen.set(f.properties.KEY_CODE, f));
-        }
+        const shapes = info.selectedStoreIds
+          .map((id) => StoreManager.getStoreById(id))
+          .filter(Boolean)
+          .map((store) => ShapeBuilders.circle(store.lat, store.lon, radius));
+        const { features, anyTooBroad } = await unionFeaturesForShapes(shapes);
         if (requestId !== boundaryRequestId) return;
-        const features = Array.from(seen.values());
         AppMap.renderBoundaryFeatures(features);
         Panel.setBoundaryStatus(
           anyTooBroad
             ? `一部の店舗は範囲が広すぎるため除外されました。${features.length.toLocaleString()} 町丁目・字を表示中`
             : `${features.length.toLocaleString()} 町丁目・字を表示中(店舗 ${info.selectedStoreIds.length}件)`
+        );
+      }
+    } else if (["circle", "time", "train"].includes(info.mode) && info.geojsonList) {
+      if (info.geojsonList.length === 0) {
+        AppMap.renderBoundaryFeatures([]);
+        Panel.setBoundaryStatus("");
+      } else {
+        Panel.setBoundaryStatus("町丁目境界を読み込み中…");
+        const { features, anyTooBroad } = await unionFeaturesForShapes(info.geojsonList);
+        if (requestId !== boundaryRequestId) return;
+        AppMap.renderBoundaryFeatures(features);
+        Panel.setBoundaryStatus(
+          anyTooBroad
+            ? `一部のポイントは範囲が広すぎるため除外されました。${features.length.toLocaleString()} 町丁目・字を表示中`
+            : `${features.length.toLocaleString()} 町丁目・字を表示中(ポイント ${info.geojsonList.length}件)`
         );
       }
     } else if (info.mode && info.geojson) {
@@ -162,6 +189,10 @@ document.addEventListener("DOMContentLoaded", () => {
   AppMap.on("shapeCleared", () => {
     Panel.setConditionEnabled(false);
     refreshBoundaries();
+  });
+  AppMap.on("reverseLookupApplied", () => {
+    Panel.setConditionEnabled(AppMap.isShapeReady());
+    recompute();
   });
   AppMap.onMoveEnd(
     debounce(() => {

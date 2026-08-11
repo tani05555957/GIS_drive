@@ -92,30 +92,21 @@
         <ul id="search-results" class="search-results hidden"></ul>
       </section>
 
-      <!-- 業務ツール -->
-      <section class="panel-section">
-        <label class="section-title">業務ツール</label>
-        <button id="open-store-mgr-btn" class="btn-tool"><i class="fa-solid fa-shop"></i> 店舗管理</button>
-      </section>
-
       <!-- ②商圏作成方法の指定 -->
       <section class="panel-section">
         <div class="fw-section-bar">商圏作成方法の指定</div>
+        <p class="hint small">作成方法を選ぶ前でも地図をクリックしてポイントを指定できます(Shift+クリックで複数指定)。</p>
         <div class="shape-select" id="shape-select">
-          <button class="shape-btn" data-shape="city"><i class="fa-solid fa-city"></i><span>市区町村</span></button>
           <button class="shape-btn" data-shape="circle"><i class="fa-regular fa-circle"></i><span>円</span></button>
-          <button class="shape-btn" data-shape="train"><i class="fa-solid fa-train"></i><span>電車</span></button>
           <button class="shape-btn" data-shape="time"><i class="fa-regular fa-clock"></i><span>所要時間</span></button>
           <button class="shape-btn" data-shape="polygon"><i class="fa-solid fa-draw-polygon"></i><span>任意商圏</span></button>
+          <button class="shape-btn" data-shape="train"><i class="fa-solid fa-train"></i><span>電車</span></button>
+          <button class="shape-btn" data-shape="city"><i class="fa-solid fa-city"></i><span>市区町村</span></button>
           <button class="shape-btn" data-shape="multiStore"><i class="fa-solid fa-diagram-project"></i><span>多店舗分析</span></button>
         </div>
-
-        <!-- 市区町村 -->
-        <div class="shape-options hidden" id="opt-city">
-          <label class="opt-label">都道府県</label>
-          <select id="city-pref-select" class="text-input"></select>
-          <label class="opt-label">市区町村(複数選択可)</label>
-          <div id="city-checklist" class="checklist"></div>
+        <div id="origin-points-info" class="origin-points-row hint small hidden">
+          <span>選択中のポイント: <strong id="origin-points-count">0</strong> 件</span>
+          <button id="origin-points-clear" class="btn-text"><i class="fa-solid fa-xmark"></i> クリア</button>
         </div>
 
         <!-- 円 -->
@@ -124,15 +115,20 @@
           <select id="circle-origin-store" class="text-input"></select>
           <label class="opt-label">半径: <span id="circle-radius-val">500</span> m</label>
           <input type="range" id="circle-radius" min="100" max="5000" step="100" value="500">
-          <p class="hint">起点店舗を選ぶか、地図をクリックして中心を指定してください。</p>
-        </div>
+          <p class="hint">起点店舗を選ぶか、地図をクリックして中心を指定してください(Shift+クリックで複数のポイントを追加できます)。</p>
 
-        <!-- 電車 -->
-        <div class="shape-options hidden" id="opt-train">
-          <label class="opt-label">起点店舗(任意)</label>
-          <select id="train-origin-store" class="text-input"></select>
-          <p class="hint">起点店舗を選ぶか、地図をクリックして起点(店舗等)を指定してください。最寄り駅(Overpass API)を自動検索し、徒歩圏+概算鉄道到達圏を表示します。</p>
-          <div id="train-status" class="hint small"></div>
+          <div class="zone-sub">
+            <label class="opt-label">逆引き(配達可能箇所数・統計上世帯数から範囲を決定)</label>
+            <div class="segmented" id="circle-reverse-metric">
+              <button data-metric="deliverable" class="seg-btn active">配達可能箇所数</button>
+              <button data-metric="statHouseholds" class="seg-btn">統計上世帯数</button>
+            </div>
+            <div class="two-col">
+              <input type="number" id="circle-reverse-target" class="text-input" min="0" step="100" placeholder="目標値(例:10000)">
+              <button id="circle-reverse-btn" class="btn-secondary small" style="margin-top:0;">逆引きで組み合わせる</button>
+            </div>
+            <div id="circle-reverse-status" class="hint small"></div>
+          </div>
         </div>
 
         <!-- 所要時間 -->
@@ -149,13 +145,56 @@
           <input type="range" id="time-minutes" min="1" max="60" step="1" value="10">
           <label class="opt-label">ORS APIキー(任意・道路network等時間圏)</label>
           <input type="text" id="ors-api-key" class="text-input" placeholder="未入力の場合は直線距離による近似円">
-          <p class="hint">起点店舗を選ぶか、地図をクリックして起点を指定してください。</p>
+          <p class="hint">起点店舗を選ぶか、地図をクリックして起点を指定してください(Shift+クリックで複数のポイントを追加できます)。</p>
+
+          <div class="zone-sub">
+            <label class="opt-label">逆引き(配達可能箇所数・統計上世帯数から範囲を決定)</label>
+            <div class="segmented" id="time-reverse-metric">
+              <button data-metric="deliverable" class="seg-btn active">配達可能箇所数</button>
+              <button data-metric="statHouseholds" class="seg-btn">統計上世帯数</button>
+            </div>
+            <div class="two-col">
+              <input type="number" id="time-reverse-target" class="text-input" min="0" step="100" placeholder="目標値(例:10000)">
+              <button id="time-reverse-btn" class="btn-secondary small" style="margin-top:0;">逆引きで組み合わせる</button>
+            </div>
+            <div id="time-reverse-status" class="hint small"></div>
+          </div>
         </div>
 
         <!-- 任意商圏(自由描画) -->
         <div class="shape-options hidden" id="opt-polygon">
           <p class="hint">地図上をクリックして頂点を追加し、始点付近をクリックまたはダブルクリックで確定します。</p>
           <button id="polygon-undo" class="btn-secondary small"><i class="fa-solid fa-rotate-left"></i> 一つ戻す</button>
+        </div>
+
+        <!-- 電車 -->
+        <div class="shape-options hidden" id="opt-train">
+          <label class="opt-label">起点店舗(任意)</label>
+          <select id="train-origin-store" class="text-input"></select>
+          <p class="hint">起点店舗を選ぶか、地図をクリックして起点(店舗等)を指定してください(Shift+クリックで複数のポイントを追加できます)。最寄り駅(Overpass API)を自動検索し、徒歩圏+概算鉄道到達圏を表示します。</p>
+          <div id="train-status" class="hint small"></div>
+
+          <div class="zone-sub">
+            <label class="opt-label">逆引き(配達可能箇所数・統計上世帯数から範囲を決定)</label>
+            <div class="segmented" id="train-reverse-metric">
+              <button data-metric="deliverable" class="seg-btn active">配達可能箇所数</button>
+              <button data-metric="statHouseholds" class="seg-btn">統計上世帯数</button>
+            </div>
+            <div class="two-col">
+              <input type="number" id="train-reverse-target" class="text-input" min="0" step="100" placeholder="目標値(例:10000)">
+              <button id="train-reverse-btn" class="btn-secondary small" style="margin-top:0;">逆引きで組み合わせる</button>
+            </div>
+            <div id="train-reverse-status" class="hint small"></div>
+          </div>
+        </div>
+
+        <!-- 市区町村 -->
+        <div class="shape-options hidden" id="opt-city">
+          <label class="opt-label">都道府県</label>
+          <select id="city-pref-select" class="text-input"></select>
+          <label class="opt-label">市区町村(複数選択可)</label>
+          <div id="city-checklist" class="checklist"></div>
+          <p class="hint">地図をクリックして市区町村を選ぶこともできます(Shift+クリックで複数選択)。</p>
         </div>
 
         <!-- 多店舗分析 -->
@@ -456,6 +495,7 @@
 <script src="js/dataStore.js"></script>
 <script src="js/boundaryLoader.js"></script>
 <script src="js/shapeBuilders.js"></script>
+<script src="js/reverseLookup.js"></script>
 <script src="js/map.js"></script>
 <script src="js/storeManager.js"></script>
 <script src="js/panel.js"></script>
