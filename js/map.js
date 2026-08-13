@@ -302,7 +302,7 @@ const AppMap = (() => {
   function finalizePolygon() {
     if (polygonLine) { map.removeLayer(polygonLine); polygonLine = null; }
     if (polygonVertexLayer) { map.removeLayer(polygonVertexLayer); polygonVertexLayer = null; }
-    polygonFinal = L.polygon(polygonPoints, { color: "#1a73e8", weight: 2, fillOpacity: 0.15 }).addTo(map);
+    polygonFinal = L.polygon(polygonPoints, { color: "#1a73e8", weight: 2, fillOpacity: 0 }).addTo(map);
     emit("shapeUpdated", getCurrentShapeInfo());
   }
 
@@ -317,7 +317,7 @@ const AppMap = (() => {
     circleLayersGroup.clearLayers();
     circleGeojsons = originPoints.map((p) => turf.circle([p.lng, p.lat], circleRadiusM / 1000, { steps: 64, units: "kilometers" }));
     circleGeojsons.forEach((gj) => {
-      L.geoJSON(gj, { style: { color: "#1a73e8", weight: 2, fillOpacity: 0.15 } }).addTo(circleLayersGroup);
+      L.geoJSON(gj, { style: { color: "#1a73e8", weight: 2, fillOpacity: 0 } }).addTo(circleLayersGroup);
     });
     emit("shapeUpdated", getCurrentShapeInfo());
   }
@@ -338,7 +338,7 @@ const AppMap = (() => {
     results.forEach((gj) => {
       const approx = !!gj.properties?.approx;
       L.geoJSON(gj, {
-        style: { color: "#e37400", weight: 2, dashArray: approx ? "6,4" : null, fillOpacity: 0.15 },
+        style: { color: "#e37400", weight: 2, dashArray: approx ? "6,4" : null, fillOpacity: 0 },
       }).addTo(timeLayersGroup);
     });
     emit("shapeUpdated", getCurrentShapeInfo());
@@ -358,7 +358,7 @@ const AppMap = (() => {
     trainLayersGroup.clearLayers();
     results.forEach((gj) => {
       L.geoJSON(gj, {
-        style: { color: "#8e44ad", weight: 2, dashArray: gj.properties?.fallback ? "6,4" : null, fillOpacity: 0.15 },
+        style: { color: "#8e44ad", weight: 2, dashArray: gj.properties?.fallback ? "6,4" : null, fillOpacity: 0 },
       }).addTo(trainLayersGroup);
     });
     emit("shapeUpdated", getCurrentShapeInfo());
