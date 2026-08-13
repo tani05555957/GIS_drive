@@ -118,6 +118,44 @@ const AppMap = (() => {
     }));
   }
 
+  // ---------------- 検索 (国土地理院 地名検索API) ----------------
+  /** 国土地理院ジオコーディングAPI(住所検索、APIキー不要・無料)。Nominatimより日本の住所表記に強い */
+  async function geocodeGsi(query) {
+    if (!query || !query.trim()) return [];
+    const url = "https://msearch.gsi.go.jp/address-search/AddressSearch?q=" + encodeURIComponent(query);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("国土地理院ジオコーディングに失敗しました");
+    const data = await res.json();
+    return data
+      .filter((d) => Array.isArray(d?.geometry?.coordinates))
+      .map((d) => ({
+        label: d.properties?.title || query,
+        lat: d.geometry.coordinates[1],
+        lon: d.geometry.coordinates[0],
+      }));
+  }
+
+  /**
+   * 住所から座標を取得する統合ジオコーディング。国土地理院APIを優先し、
+   * 該当なし・エラー時は Nominatim にフォールバックする。店舗の住所ジオコーディング用。
+   */
+  async function geocodeAddress(query) {
+    if (!query || !query.trim()) return null;
+    try {
+      const gsiResults = await geocodeGsi(query);
+      if (gsiResults.length > 0) return { ...gsiResults[0], source: "gsi" };
+    } catch (e) {
+      // フォールバックへ
+    }
+    try {
+      const nomResults = await geocodeSearch(query);
+      if (nomResults.length > 0) return { ...nomResults[0], source: "nominatim" };
+    } catch (e) {
+      // 両方失敗した場合は null を返す
+    }
+    return null;
+  }
+
   function flyTo(lat, lon, zoom = 16) {
     if (searchMarker) map.removeLayer(searchMarker);
     searchMarker = L.marker([lat, lon]).addTo(map);
@@ -550,6 +588,8 @@ const AppMap = (() => {
     on,
     off,
     geocodeSearch,
+    geocodeGsi,
+    geocodeAddress,
     flyTo,
     getMapBoundsBbox,
     onMoveEnd,

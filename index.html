@@ -354,9 +354,18 @@
   <div class="fw-body">
 
     <div id="store-panel-list" class="fw-tab-panel">
-      <button id="store-add-btn" class="btn-tool"><i class="fa-solid fa-plus"></i> 店舗を追加</button>
+      <div class="fw-inline-actions">
+        <button id="store-add-btn" class="btn-tool"><i class="fa-solid fa-plus"></i> 店舗を追加</button>
+        <button id="store-csv-import-btn" class="btn-secondary small"><i class="fa-solid fa-file-arrow-up"></i> CSVから取込</button>
+        <button id="store-csv-export-btn" class="btn-secondary small"><i class="fa-solid fa-file-arrow-down"></i> CSVエクスポート</button>
+      </div>
+      <button id="store-csv-template-btn" class="btn-secondary small"><i class="fa-solid fa-circle-info"></i> 取込用CSVフォーマットをダウンロード</button>
+      <input type="file" id="store-csv-input" accept=".csv" class="hidden">
+      <p class="hint small">CSV列: 店舗番号(必須)・店舗名(必須)・住所(必須)・配布部数(任意)。住所は国土地理院ジオコーディングAPI(失敗時はOpenStreetMap)で自動的に緯度経度へ変換されます。</p>
 
       <div id="store-form" class="inline-form hidden">
+        <label class="opt-label">店舗番号</label>
+        <input type="text" id="store-form-no" class="text-input" placeholder="例: 1001">
         <label class="opt-label">店舗名</label>
         <input type="text" id="store-form-name" class="text-input" placeholder="例: 千代田店">
         <label class="opt-label">グループ</label>
@@ -377,6 +386,8 @@
             <input type="text" id="store-form-lon" class="text-input" readonly>
           </div>
         </div>
+        <label class="opt-label">紐づいたエリア(自動判定)</label>
+        <input type="text" id="store-form-area" class="text-input" readonly placeholder="住所検索または地図指定で自動表示されます">
         <div class="two-col">
           <div>
             <label class="opt-label">配布通数</label>
@@ -396,7 +407,7 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th></th><th>店舗名</th><th>配布通数</th><th>半径</th><th>住所</th><th>更新日時</th><th></th>
+            <th></th><th>店舗番号</th><th>店舗名</th><th>配布通数</th><th>半径</th><th>住所</th><th>紐づいたエリア</th><th>更新日時</th><th></th>
           </tr>
         </thead>
         <tbody id="store-table-body"></tbody>

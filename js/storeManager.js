@@ -13,6 +13,8 @@ const StoreManager = (() => {
   let els = {};
   let editingStoreId = null;
   let editingGroupId = null;
+  let pendingLinkedArea = null; // { name, code } | null (フォーム編集中の紐づいたエリア)
+  let pendingGeocodeSource = null; // 'gsi' | 'nominatim' | 'manual' | null
 
   function uid() {
     return "id_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -84,6 +86,7 @@ const StoreManager = (() => {
 
       addBtn: document.getElementById("store-add-btn"),
       form: document.getElementById("store-form"),
+      formNo: document.getElementById("store-form-no"),
       formName: document.getElementById("store-form-name"),
       formGroup: document.getElementById("store-form-group"),
       formAddress: document.getElementById("store-form-address"),
@@ -91,11 +94,17 @@ const StoreManager = (() => {
       formPickMap: document.getElementById("store-form-pick-map"),
       formLat: document.getElementById("store-form-lat"),
       formLon: document.getElementById("store-form-lon"),
+      formArea: document.getElementById("store-form-area"),
       formCount: document.getElementById("store-form-count"),
       formRadius: document.getElementById("store-form-radius"),
       formSave: document.getElementById("store-form-save"),
       formCancel: document.getElementById("store-form-cancel"),
       tableBody: document.getElementById("store-table-body"),
+
+      csvImportBtn: document.getElementById("store-csv-import-btn"),
+      csvExportBtn: document.getElementById("store-csv-export-btn"),
+      csvTemplateBtn: document.getElementById("store-csv-template-btn"),
+      csvInput: document.getElementById("store-csv-input"),
 
       drawRadius: document.getElementById("store-draw-radius"),
       drawBtn: document.getElementById("store-draw-btn"),
@@ -121,6 +130,7 @@ const StoreManager = (() => {
     wireStoreForm();
     wireGroupForm();
     wireDrawControls();
+    wireCsv();
 
     renderGroupSelect();
     renderStoreTable();
@@ -169,10 +179,12 @@ const StoreManager = (() => {
       if (!q) return;
       els.formAddressSearch.disabled = true;
       try {
-        const results = await AppMap.geocodeSearch(q);
-        if (results.length > 0) {
-          els.formLat.value = results[0].lat.toFixed(6);
-          els.formLon.value = results[0].lon.toFixed(6);
+        const result = await AppMap.geocodeAddress(q);
+        if (result) {
+          els.formLat.value = result.lat.toFixed(6);
+          els.formLon.value = result.lon.toFixed(6);
+          pendingGeocodeSource = result.source;
+          await updateLinkedAreaDisplay(result.lat, result.lon);
         } else {
           alert("該当する住所が見つかりませんでした");
         }
@@ -188,14 +200,34 @@ const StoreManager = (() => {
         open();
         els.formLat.value = latlng.lat.toFixed(6);
         els.formLon.value = latlng.lng.toFixed(6);
+        pendingGeocodeSource = "manual";
+        updateLinkedAreaDisplay(latlng.lat, latlng.lng);
       });
     });
+  }
+
+  /** 緯度経度から紐づく市区町村(レイヤ)をオフライン境界データで判定し、フォーム表示・保存用状態を更新する */
+  async function updateLinkedAreaDisplay(lat, lon) {
+    pendingLinkedArea = null;
+    els.formArea.value = "判定中...";
+    try {
+      const area = await BoundaryLoader.findMunicipalityAtPoint(lat, lon);
+      if (area) {
+        pendingLinkedArea = { name: `${area.prefName || ""}${area.name || ""}`, code: area.code };
+        els.formArea.value = pendingLinkedArea.name;
+      } else {
+        els.formArea.value = "該当エリアなし(範囲外)";
+      }
+    } catch (e) {
+      els.formArea.value = "判定できませんでした";
+    }
   }
 
   function showStoreForm(id) {
     editingStoreId = id;
     const s = id ? getStoreById(id) : null;
     renderGroupSelect();
+    els.formNo.value = s?.storeNo || "";
     els.formName.value = s?.name || "";
     els.formGroup.value = s?.groupId || groups[0]?.id || "";
     els.formAddress.value = s?.address || "";
@@ -203,17 +235,27 @@ const StoreManager = (() => {
     els.formLon.value = s?.lon != null ? s.lon.toFixed(6) : "";
     els.formCount.value = s?.distributionCount ?? 0;
     els.formRadius.value = s?.radius ?? 500;
+    pendingLinkedArea = s?.linkedAreaName ? { name: s.linkedAreaName, code: s.linkedAreaCode } : null;
+    pendingGeocodeSource = s?.geocodeSource || null;
+    els.formArea.value = pendingLinkedArea?.name || "";
     els.form.classList.remove("hidden");
   }
   function hideStoreForm() {
     els.form.classList.add("hidden");
     editingStoreId = null;
+    pendingLinkedArea = null;
+    pendingGeocodeSource = null;
   }
 
   function saveStoreForm() {
+    const storeNo = els.formNo.value.trim();
     const name = els.formName.value.trim();
     const lat = parseFloat(els.formLat.value);
     const lon = parseFloat(els.formLon.value);
+    if (!storeNo) {
+      alert("店舗番号を入力してください");
+      return;
+    }
     if (!name) {
       alert("店舗名を入力してください");
       return;
@@ -223,31 +265,25 @@ const StoreManager = (() => {
       return;
     }
     const now = new Date().toISOString();
+    const fields = {
+      storeNo,
+      name,
+      groupId: els.formGroup.value,
+      address: els.formAddress.value.trim(),
+      lat,
+      lon,
+      distributionCount: Number(els.formCount.value) || 0,
+      radius: Number(els.formRadius.value) || 500,
+      linkedAreaName: pendingLinkedArea?.name || null,
+      linkedAreaCode: pendingLinkedArea?.code || null,
+      geocodeSource: pendingGeocodeSource,
+      updatedAt: now,
+    };
     if (editingStoreId) {
       const s = getStoreById(editingStoreId);
-      Object.assign(s, {
-        name,
-        groupId: els.formGroup.value,
-        address: els.formAddress.value.trim(),
-        lat,
-        lon,
-        distributionCount: Number(els.formCount.value) || 0,
-        radius: Number(els.formRadius.value) || 500,
-        updatedAt: now,
-      });
+      Object.assign(s, fields);
     } else {
-      stores.push({
-        id: uid(),
-        name,
-        groupId: els.formGroup.value,
-        address: els.formAddress.value.trim(),
-        lat,
-        lon,
-        distributionCount: Number(els.formCount.value) || 0,
-        radius: Number(els.formRadius.value) || 500,
-        createdAt: now,
-        updatedAt: now,
-      });
+      stores.push({ id: uid(), ...fields, createdAt: now });
     }
     persistStores();
     renderStoreTable();
@@ -272,10 +308,12 @@ const StoreManager = (() => {
         const g = groupsMap.get(s.groupId);
         return `<tr>
           <td><input type="checkbox" class="store-row-check" data-id="${s.id}"></td>
+          <td>${escapeHtml(s.storeNo || "-")}</td>
           <td>${escapeHtml(s.name)}</td>
           <td>${(s.distributionCount || 0).toLocaleString()}</td>
           <td>${(s.radius || 0).toLocaleString()}m</td>
           <td title="${escapeHtml(s.address || "")}">${escapeHtml(s.address || "-")}</td>
+          <td>${escapeHtml(s.linkedAreaName || (s.lat != null ? "-" : "未取得"))}</td>
           <td>${fmtDate(s.updatedAt)}</td>
           <td class="actions">
             <i class="fa-solid fa-pen" data-act="edit" data-id="${s.id}" title="編集"></i>
@@ -414,6 +452,247 @@ const StoreManager = (() => {
     els.labelToggle.addEventListener("change", () => {
       AppMap.renderStoreMarkers(stores, getGroupsById(), { showLabels: els.labelToggle.checked });
     });
+  }
+
+  // ---------------- CSV取込・エクスポート ----------------
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /** 簡易CSVパーサー(ダブルクオート内のカンマ・改行に対応)。js/statsData.js のパーサーと同等の実装 */
+  function parseCsvSimple(text) {
+    const rows = [];
+    let row = [];
+    let field = "";
+    let inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (text[i + 1] === '"') {
+            field += '"';
+            i++;
+          } else {
+            inQuotes = false;
+          }
+        } else {
+          field += c;
+        }
+      } else if (c === '"') {
+        inQuotes = true;
+      } else if (c === ",") {
+        row.push(field);
+        field = "";
+      } else if (c === "\n" || c === "\r") {
+        if (c === "\r" && text[i + 1] === "\n") i++;
+        row.push(field);
+        field = "";
+        if (!(row.length === 1 && row[0] === "")) rows.push(row);
+        row = [];
+      } else {
+        field += c;
+      }
+    }
+    if (field !== "" || row.length) {
+      row.push(field);
+      rows.push(row);
+    }
+    return rows;
+  }
+
+  /** UTF-8として妥当ならUTF-8、そうでなければShift_JISとして読む(Excel等どちらの保存形式にも対応) */
+  function decodeCsvBuffer(buf) {
+    let text = new TextDecoder("utf-8", { fatal: false }).decode(buf);
+    if (text.includes("�")) {
+      text = new TextDecoder("shift-jis", { fatal: false }).decode(buf);
+    }
+    return text.replace(/^﻿/, "");
+  }
+
+  function csvEscape(v) {
+    const s = String(v ?? "");
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+  function downloadCsv(content, filename) {
+    const blob = new Blob(["﻿" + content], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  function tsCompact() {
+    return new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
+  }
+
+  function wireCsv() {
+    els.csvImportBtn.addEventListener("click", () => els.csvInput.click());
+    els.csvInput.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      e.target.value = "";
+      if (!file) return;
+      await importStoresFromCsv(file);
+    });
+    els.csvTemplateBtn.addEventListener("click", downloadCsvTemplate);
+    els.csvExportBtn.addEventListener("click", exportStoresCsv);
+  }
+
+  function downloadCsvTemplate() {
+    const header = ["店舗番号", "店舗名", "住所", "配布部数"];
+    const example = ["1001", "千代田店", "東京都千代田区丸の内1-1-1", "3000"];
+    const content = [header, example].map((r) => r.map(csvEscape).join(",")).join("\n");
+    downloadCsv(content, "店舗取込フォーマット.csv");
+  }
+
+  async function importStoresFromCsv(file) {
+    const buf = await file.arrayBuffer();
+    const text = decodeCsvBuffer(buf);
+    const rows = parseCsvSimple(text);
+    if (rows.length < 2) {
+      alert("CSVにデータ行がありません");
+      return;
+    }
+    const headers = rows[0].map((h) => h.trim());
+    const idxNo = headers.indexOf("店舗番号");
+    const idxName = headers.indexOf("店舗名");
+    const idxAddr = headers.indexOf("住所");
+    const idxCount = headers.indexOf("配布部数");
+    if (idxNo < 0 || idxName < 0 || idxAddr < 0) {
+      alert("CSVヘッダーに「店舗番号」「店舗名」「住所」の列が必要です");
+      return;
+    }
+    const dataRows = rows.slice(1).filter((r) => r.some((c) => c.trim() !== ""));
+    if (dataRows.length === 0) {
+      alert("CSVにデータ行がありません");
+      return;
+    }
+    if (
+      !confirm(
+        `${dataRows.length}件の店舗を取込みます。住所のジオコーディングのため時間がかかる場合があります。よろしいですか?`
+      )
+    ) {
+      return;
+    }
+
+    els.csvImportBtn.disabled = true;
+    els.csvImportBtn.textContent = "取込中... 0 / " + dataRows.length;
+    const defaultGroupId = groups[0]?.id || "";
+    let okCount = 0;
+    let ngCount = 0;
+    const ngRows = [];
+
+    for (let i = 0; i < dataRows.length; i++) {
+      const row = dataRows[i];
+      const storeNo = (row[idxNo] || "").trim();
+      const name = (row[idxName] || "").trim();
+      const address = (row[idxAddr] || "").trim();
+      const count = idxCount >= 0 ? Number(row[idxCount]) || 0 : 0;
+      els.csvImportBtn.textContent = `取込中... ${i + 1} / ${dataRows.length}`;
+
+      if (!storeNo || !name || !address) {
+        ngCount++;
+        ngRows.push(`${i + 2}行目: 店舗番号・店舗名・住所のいずれかが未入力です`);
+        continue;
+      }
+
+      let geo = null;
+      try {
+        geo = await AppMap.geocodeAddress(address);
+      } catch (e) {
+        geo = null;
+      }
+
+      const now = new Date().toISOString();
+      const store = {
+        id: uid(),
+        storeNo,
+        name,
+        groupId: defaultGroupId,
+        address,
+        lat: geo?.lat ?? null,
+        lon: geo?.lon ?? null,
+        distributionCount: count,
+        radius: 500,
+        geocodeSource: geo?.source || null,
+        linkedAreaName: null,
+        linkedAreaCode: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      if (geo) {
+        okCount++;
+        try {
+          const area = await BoundaryLoader.findMunicipalityAtPoint(geo.lat, geo.lon);
+          if (area) {
+            store.linkedAreaName = `${area.prefName || ""}${area.name || ""}`;
+            store.linkedAreaCode = area.code;
+          }
+        } catch (e) {
+          // エリア判定に失敗しても緯度経度は保持する
+        }
+      } else {
+        ngCount++;
+        ngRows.push(`${i + 2}行目 (${storeNo} ${name}): 住所からジオコーディングできませんでした`);
+      }
+
+      stores.push(store);
+      await sleep(200); // 外部APIへの連続リクエストを避けるためのウェイト
+    }
+
+    persistStores();
+    renderStoreTable();
+    els.csvImportBtn.disabled = false;
+    els.csvImportBtn.innerHTML = '<i class="fa-solid fa-file-arrow-up"></i> CSVから取込';
+
+    let msg = `取込完了: 成功 ${okCount}件 / 失敗 ${ngCount}件`;
+    if (ngRows.length > 0) {
+      msg += "\n\n" + ngRows.slice(0, 20).join("\n");
+      if (ngRows.length > 20) msg += `\n...他${ngRows.length - 20}件`;
+    }
+    alert(msg);
+  }
+
+  function exportStoresCsv() {
+    if (stores.length === 0) {
+      alert("エクスポートする店舗がありません");
+      return;
+    }
+    const groupsMap = getGroupsById();
+    const sourceLabel = { gsi: "国土地理院", nominatim: "OpenStreetMap", manual: "地図で指定" };
+    const header = [
+      "店舗番号",
+      "店舗名",
+      "グループ",
+      "住所",
+      "緯度",
+      "経度",
+      "配布部数",
+      "半径(m)",
+      "紐づいたエリア",
+      "ジオコーディング方式",
+      "更新日時",
+    ];
+    const lines = [header.map(csvEscape).join(",")];
+    stores.forEach((s) => {
+      const g = groupsMap.get(s.groupId);
+      const cells = [
+        s.storeNo || "",
+        s.name || "",
+        g?.name || "",
+        s.address || "",
+        s.lat != null ? s.lat : "",
+        s.lon != null ? s.lon : "",
+        s.distributionCount || 0,
+        s.radius || 0,
+        s.linkedAreaName || "",
+        s.geocodeSource ? sourceLabel[s.geocodeSource] || s.geocodeSource : "未取得",
+        fmtDate(s.updatedAt),
+      ];
+      lines.push(cells.map(csvEscape).join(","));
+    });
+    downloadCsv(lines.join("\n"), `店舗一覧_${tsCompact()}.csv`);
   }
 
   return {
