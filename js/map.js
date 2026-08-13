@@ -409,6 +409,8 @@ const AppMap = (() => {
    * colorByKeyCode が空(条件未選択)の場合は既定の薄い黄色/濃い黄色で表示する。
    * opts.fallbackFill/fallbackBorder を指定すると、ランキング自体は有効だが該当データが
    * 無いポリゴン(colorByKeyCodeに値が無い)の配色を差し替えられる(既定はグレー)。
+   * opts.hiddenKeyCodes(Set)を指定すると、該当ポリゴンは境界線を残したまま塗りつぶしだけ
+   * 完全透明にする(予算通数の指定で「選外」になった町丁目の表示用)。
    */
   function applyBoundaryColors(colorByKeyCode, opts = {}) {
     lastColorByKeyCode = colorByKeyCode;
@@ -417,12 +419,13 @@ const AppMap = (() => {
     const fallbackFill = opts.fallbackFill ?? NO_CONDITION_FILL;
     const fallbackBorder = opts.fallbackBorder ?? NO_CONDITION_BORDER;
     const fallbackWeight = opts.fallbackFill ? 1 : 1.5;
+    const hiddenKeyCodes = opts.hiddenKeyCodes;
 
     boundaryLayersByKey.forEach((layer, key) => {
       const fill = colorByKeyCode.get(key);
       layer.setStyle({
         fillColor: fill || fallbackFill,
-        fillOpacity: fillOpacityRatio,
+        fillOpacity: hiddenKeyCodes && hiddenKeyCodes.has(key) ? 0 : fillOpacityRatio,
         color: selectedAreaKeyCodes.has(key) ? "#1a73e8" : fill ? NO_DATA_BORDER : fallbackBorder,
         weight: selectedAreaKeyCodes.has(key) ? 3 : fill ? 1 : fallbackWeight,
       });

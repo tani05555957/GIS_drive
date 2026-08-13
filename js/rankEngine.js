@@ -7,6 +7,13 @@
  * - 選択された軸が3つ以上 → 各軸の比率を標準化(z-score)して合計し、1つの合成スコアとして5段階色分け
  */
 const RankEngine = (() => {
+  /** 直近の compute() 結果(予算通数の指定など、他モジュールから最新のランキングを参照するため保持) */
+  let lastResult = { mode: "none", colorByKeyCode: new Map(), scoreByKeyCode: new Map() };
+  function finish(result) {
+    lastResult = result;
+    return result;
+  }
+
   /** カテゴリ内の選択肢合計/分母比率を、表示中featureごとに算出する */
   function buildRatioMap(features, category, selectedKeys) {
     const map = new Map();
@@ -36,7 +43,7 @@ const RankEngine = (() => {
     const activeCats = categories.filter((cat) => (selections[cat.key] || []).length > 0);
 
     if (activeCats.length === 0) {
-      return { mode: "none", colorByKeyCode: new Map() };
+      return finish({ mode: "none", colorByKeyCode: new Map(), scoreByKeyCode: new Map() });
     }
 
     if (activeCats.length === 1) {
@@ -48,11 +55,12 @@ const RankEngine = (() => {
         const rank = rankOf(v);
         if (rank >= 0) colorByKeyCode.set(key, RANK_COLORS[rank]);
       });
-      return {
+      return finish({
         mode: "single",
         colorByKeyCode,
+        scoreByKeyCode: valueMap,
         legend: { breaks, colors: RANK_COLORS, unitLabel: `${cat.label}比率`, catLabel: cat.label, format: "percent" },
-      };
+      });
     }
 
     if (activeCats.length === 2) {
@@ -63,6 +71,10 @@ const RankEngine = (() => {
       const { rankOf: rankOfB } = DataStore.classifyByQuantile(valueMapB, 3);
 
       const colorByKeyCode = new Map();
+      // 予算通数の指定などで「ランキング上位から」順序付けするための合成スコア(標準化2軸の合計)
+      const zA = standardize(valueMapA);
+      const zB = standardize(valueMapB);
+      const scoreByKeyCode = new Map();
       // セル(軸A段階×軸B段階)ごとの統計上世帯数の合計 → 商圏内世帯数に占める割合(%)を求める
       const cellWeight = [
         [0, 0, 0],
@@ -77,6 +89,7 @@ const RankEngine = (() => {
         const rB = rankOfB(valueMapB.get(key));
         if (rA < 0 || rB < 0) return;
         colorByKeyCode.set(key, BIVARIATE_COLORS[rA][rB]);
+        scoreByKeyCode.set(key, zA.get(key) + zB.get(key));
 
         const weight = StatsData.getRecord(key)?.statHouseholds || 0;
         cellWeight[rA][rB] += weight;
@@ -84,11 +97,12 @@ const RankEngine = (() => {
       });
       const cellPercent = cellWeight.map((row) => row.map((w) => (totalWeight ? (w / totalWeight) * 100 : 0)));
 
-      return {
+      return finish({
         mode: "bivariate",
         colorByKeyCode,
+        scoreByKeyCode,
         legend: { catALabel: catA.label, catBLabel: catB.label, colors: BIVARIATE_COLORS, cellPercent },
-      };
+      });
     }
 
     // 3軸以上: 各軸の比率を標準化して合計 → 1つの合成スコアとして5段階色分け
@@ -113,9 +127,10 @@ const RankEngine = (() => {
       if (rank >= 0) colorByKeyCode.set(key, RANK_COLORS[rank]);
     });
 
-    return {
+    return finish({
       mode: "composite",
       colorByKeyCode,
+      scoreByKeyCode: compositeMap,
       legend: {
         breaks: breaks.map((b) => b - shift),
         colors: RANK_COLORS,
@@ -123,8 +138,12 @@ const RankEngine = (() => {
         catLabels: activeCats.map((c) => c.label),
         format: "decimal",
       },
-    };
+    });
   }
 
-  return { compute };
+  function getLast() {
+    return lastResult;
+  }
+
+  return { compute, getLast };
 })();

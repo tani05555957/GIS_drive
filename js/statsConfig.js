@@ -114,6 +114,14 @@ const STAT_CATEGORIES = [
       { key: "area_sqm", label: "面積(㎡)", header: "面積（" },
     ],
   },
+  {
+    // 新聞購読世帯数のCSV列が未提供のため、現状は常に0%(常にNO_DATA表示)になる。
+    // 実データのCSVに「新聞購読世帯数」列が追加され次第、自動的に反映される。
+    key: "newspaper",
+    label: "新聞購読率",
+    base: "households",
+    options: [{ key: "subscribed", label: "新聞購読世帯", header: "新聞購読世帯数" }],
+  },
 ];
 
 /** CSVの基礎列(KEY_CODE・配達可能箇所数・統計上世帯数・人口総数)の前方一致キー */

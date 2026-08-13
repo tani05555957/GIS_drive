@@ -218,7 +218,7 @@
         </button>
       </section>
 
-      <!-- ③④ 条件パネル(属性条件・新聞・指標を統合) -->
+      <!-- 条件パネル(属性条件。新聞購読率も STAT_CATEGORIES の1カテゴリとしてここに含まれる) -->
       <section class="panel-section hidden" id="segment-panel">
         <label class="section-title">属性条件(統計指標)</label>
         <p class="hint small">
@@ -227,12 +227,6 @@
           3つ以上なら各カテゴリの比率を標準化して合計したスコアで5段階に色分けします。
         </p>
         <div id="segment-groups"></div>
-
-        <div class="fw-section-bar">新聞(配布媒体)の指定</div>
-        <div id="newspaper-list" class="checklist"></div>
-        <label class="opt-label">カバー率(◯%以下)</label>
-        <input type="number" id="coverage-rate" class="text-input" min="0" max="100" value="100">
-        <p class="hint small">新聞購読データ等の実データが提供された場合のみ有効な任意機能です。現在はデモ選択のみで結果には反映されません。</p>
       </section>
 
       <!-- 集計結果 -->
@@ -250,30 +244,24 @@
         <div class="fw-section-bar">予算通数の指定</div>
         <label class="opt-label">予算通数を指定してください。</label>
         <div class="two-col">
-          <input type="number" id="budget-count" class="text-input" min="0" step="100" value="10000">
+          <input type="number" id="budget-count" class="text-input" min="0" step="100" value="50000">
           <label class="segment-option"><input type="checkbox" id="select-all-towns"> 全町丁目を選択</label>
         </div>
-        <p class="hint small">配達見込世帯数はあくまで目安です。必ずこの通数を配達できることを保証するものではありません。</p>
+        <p class="hint small">
+          「条件を選択」で設定したランキングの上位(商圏内)から、指定した通数に近くなるところまで町丁目を選びます。先に条件を選択してください。
+        </p>
 
+        <label class="opt-label">数を合わせる基準</label>
         <div class="budget-row">
-          <label class="segment-option"><input type="radio" name="budget-mode" id="budget-mode-estimate" checked> 配達見込世帯数</label>
-          <span id="budget-estimate-households" class="budget-value">0 世帯</span>
+          <label class="segment-option"><input type="radio" name="budget-mode" id="budget-mode-deliverable" checked> 配達可能箇所数</label>
+          <span id="budget-deliverable-total" class="budget-value">0 箇所</span>
         </div>
-        <label class="segment-option small-check"><input type="checkbox" id="exclude-zero" checked> 配達見込世帯数がゼロのものを除外</label>
+        <div class="budget-row">
+          <label class="segment-option"><input type="radio" name="budget-mode" id="budget-mode-households"> 統計上世帯数</label>
+          <span id="budget-households-total" class="budget-value">0 世帯</span>
+        </div>
+        <label class="segment-option small-check"><input type="checkbox" id="exclude-zero" checked> 選択した基準がゼロのものを除外</label>
 
-        <div class="budget-row">
-          <label class="segment-option"><input type="radio" name="budget-mode" id="budget-mode-statistical"> 統計上配込世帯数</label>
-          <span id="budget-statistical-households" class="budget-value">0 世帯</span>
-        </div>
-        <div class="budget-row">
-          <span class="opt-label" style="margin:0;">掛け率</span>
-          <input type="number" id="budget-multiplier" class="text-input small-num" min="0" max="200" value="70">
-          <span>%</span>
-        </div>
-        <div class="budget-row">
-          <span class="opt-label" style="margin:0;">統計上世帯数</span>
-          <span id="budget-base-households" class="budget-value">0 世帯</span>
-        </div>
         <div class="budget-row">
           <span class="opt-label" style="margin:0;">町丁目数</span>
           <span id="budget-town-count" class="budget-value">0</span>
@@ -284,17 +272,12 @@
         <div id="detail-panel" class="hidden">
           <div class="detail-table-wrap">
             <table class="data-table">
-              <thead><tr><th>町丁目</th><th>世帯数</th><th>統計上世帯数</th></tr></thead>
+              <thead><tr><th>町丁目</th><th>配達可能箇所数</th><th>統計上世帯数</th></tr></thead>
               <tbody id="detail-table-body"></tbody>
             </table>
           </div>
           <button id="detail-csv-btn" class="btn-secondary small"><i class="fa-solid fa-file-csv"></i> 明細をCSV出力</button>
         </div>
-      </section>
-
-      <!-- 逆引き分析 -->
-      <section class="panel-section">
-        <button id="reverse-btn" class="btn-secondary"><i class="fa-solid fa-rotate"></i> 逆引き分析</button>
       </section>
 
       <!-- 保存 -->
@@ -487,7 +470,6 @@
 <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 
 <script src="data/sample_stats.js"></script>
-<script src="data/newspapers.js"></script>
 <script src="js/config.js"></script>
 <script src="js/statsConfig.js"></script>
 <script src="js/statsData.js"></script>

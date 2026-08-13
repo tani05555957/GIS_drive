@@ -3,16 +3,15 @@
  * 以下をそれぞれサイドバー/アプリ起動前の開始ゲートに統合する。
  * - ①作成方法の指定 → アプリ表示前の開始ゲート(#start-gate)
  * - ②商圏作成方法の指定 → サイドバー(js/panel.js の商圏作成方法セクション)
- * - ③新聞の指定 → サイドバー「条件を選択」パネルに統合(④指標の指定は「条件を選択」の属性条件と
- *   機能が重複するため廃止。実統計指標によるランキングは js/rankEngine.js が担う)
- * - ⑤予算通数の指定 → サイドバー独立セクション(分析開始・明細を含む)
- * - 逆引き分析・保存 → サイドバー独立ボタン
+ * - ③新聞購読率の指定 → サイドバー「条件を選択」パネルの属性条件の1カテゴリとして統合
+ *   (js/statsConfig.js の STAT_CATEGORIES、実統計指標によるランキングは js/rankEngine.js が担う)
+ * - ⑤予算通数の指定 → サイドバー独立セクション(分析開始・明細を含む)。RankEngine.getLast() が
+ *   保持する「条件を選択」のランキング(scoreByKeyCode)上位から、指定通数に最も近くなるところまで
+ *   町丁目を選び、選外の町丁目は境界を残したまま塗りを完全透明にする。
+ * - 保存 → サイドバー独立ボタン
  * - レポート出力 → 既存の「レポート出力」ボタンに統合(main.js から exportReportBundle を呼ぶ)
  *
  * 実装上の簡略化(いずれもUI上に明記):
- * - 「配達見込世帯数」は実データが無いため boundaries/ の世帯数(SETAI)をそのまま用いる。
- * - 「逆引き分析」は、対象町丁目全体の統計上世帯数から目標予算通数を満たす掛け率を逆算する簡易実装。
- * - 「新聞(配布媒体)」のカバー率は実データが提供されていないため選択状態の保存のみで結果には影響しない。
  * - 「任意商圏」で作成したプランは、描画したポリゴン形状そのものは複製時に復元されない(地図上で再度描画が必要)。
  */
 const DeliveryPlan = (() => {
@@ -58,18 +57,13 @@ const DeliveryPlan = (() => {
   // ---------------- 初期化 ----------------
   function init() {
     els = {
-      newspaperList: document.getElementById("newspaper-list"),
-      coverageRate: document.getElementById("coverage-rate"),
-
       budgetCount: document.getElementById("budget-count"),
       selectAllTowns: document.getElementById("select-all-towns"),
-      budgetModeEstimate: document.getElementById("budget-mode-estimate"),
-      budgetModeStatistical: document.getElementById("budget-mode-statistical"),
-      budgetEstimateHouseholds: document.getElementById("budget-estimate-households"),
+      budgetModeDeliverable: document.getElementById("budget-mode-deliverable"),
+      budgetModeHouseholds: document.getElementById("budget-mode-households"),
+      budgetDeliverableTotal: document.getElementById("budget-deliverable-total"),
+      budgetHouseholdsTotal: document.getElementById("budget-households-total"),
       excludeZero: document.getElementById("exclude-zero"),
-      budgetStatisticalHouseholds: document.getElementById("budget-statistical-households"),
-      budgetMultiplier: document.getElementById("budget-multiplier"),
-      budgetBaseHouseholds: document.getElementById("budget-base-households"),
       budgetTownCount: document.getElementById("budget-town-count"),
 
       analyzeBtn: document.getElementById("analyze-btn"),
@@ -78,7 +72,6 @@ const DeliveryPlan = (() => {
       detailTableBody: document.getElementById("detail-table-body"),
       detailCsvBtn: document.getElementById("detail-csv-btn"),
 
-      reverseBtn: document.getElementById("reverse-btn"),
       saveNameInput: document.getElementById("save-plan-name"),
       saveBtn: document.getElementById("save-plan-btn"),
 
@@ -95,7 +88,6 @@ const DeliveryPlan = (() => {
     els.saveNameInput.value = defaultPlanName();
     els.gateNameInput.value = defaultPlanName();
 
-    renderNewspaperList();
     wireActions();
     wireStartGate();
   }
@@ -163,60 +155,70 @@ const DeliveryPlan = (() => {
     }
   }
 
-  // ---------------- ③ 新聞(配布媒体) ----------------
-  function renderNewspaperList() {
-    els.newspaperList.innerHTML = (typeof SAMPLE_NEWSPAPERS !== "undefined" ? SAMPLE_NEWSPAPERS : [])
-      .map((np) => `<label><input type="checkbox" class="np-check" value="${np.id}"> ${escapeHtml(np.name)}</label>`)
-      .join("");
-  }
-
   // ---------------- ⑤ 予算通数・分析ロジック ----------------
-  /** 配達見込世帯数は実データが無いため boundaries/ の世帯数(SETAI)を基礎値として用いる */
+  /**
+   * 「条件を選択」で計算済みのランキング(RankEngine.getLast().scoreByKeyCode、値が大きいほど上位)の
+   * 上位から順に、選んだ基準(配達可能箇所数/統計上世帯数)の累計が予算通数に最も近くなる
+   * ところまで町丁目を採用する。ランキング対象外(データ無し)の町丁目は候補から除く。
+   */
   function computeBudgetSelection(features) {
+    const rank = RankEngine.getLast();
+    const scoreByKeyCode = rank.scoreByKeyCode || new Map();
     const excludeZero = els.excludeZero.checked;
-    const useStatistical = els.budgetModeStatistical.checked;
-    const multiplier = (Number(els.budgetMultiplier.value) || 0) / 100;
+    const useDeliverable = els.budgetModeDeliverable.checked;
     const selectAll = els.selectAllTowns.checked;
     const budget = Number(els.budgetCount.value) || 0;
 
-    const allRows = features.map((f) => {
-      const households = DataStore.getHouseholds(f);
-      return { feature: f, households, estimateHouseholds: households, statisticalHouseholds: households * multiplier };
-    });
+    const allRows = features
+      .map((f) => {
+        const key = f.properties?.KEY_CODE;
+        const record = StatsData.getRecord(key);
+        return {
+          feature: f,
+          key,
+          deliverable: record?.deliverable || 0,
+          statHouseholds: record?.statHouseholds || 0,
+          score: scoreByKeyCode.get(key),
+        };
+      })
+      .filter((r) => r.score != null);
 
-    let candidates = allRows.filter((r) => !excludeZero || r.households > 0);
-    candidates = candidates.slice().sort((a, b) => b.households - a.households);
+    const metricOf = (r) => (useDeliverable ? r.deliverable : r.statHouseholds);
+    const candidates = allRows.filter((r) => !excludeZero || metricOf(r) > 0).sort((a, b) => b.score - a.score);
 
     let selected;
     if (selectAll) {
       selected = candidates;
     } else {
-      selected = [];
       let cumulative = 0;
-      for (const row of candidates) {
-        if (cumulative >= budget) break;
-        selected.push(row);
-        cumulative += useStatistical ? row.statisticalHouseholds : row.estimateHouseholds;
-      }
+      let bestK = 0;
+      let bestDiff = Math.abs(budget);
+      candidates.forEach((row, i) => {
+        cumulative += metricOf(row);
+        const diff = Math.abs(cumulative - budget);
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          bestK = i + 1;
+        }
+      });
+      selected = candidates.slice(0, bestK);
     }
 
     const totals = selected.reduce(
       (acc, r) => {
-        acc.estimate += r.estimateHouseholds;
-        acc.statistical += r.statisticalHouseholds;
-        acc.base += r.households;
+        acc.deliverable += r.deliverable;
+        acc.households += r.statHouseholds;
         return acc;
       },
-      { estimate: 0, statistical: 0, base: 0 }
+      { deliverable: 0, households: 0 }
     );
 
     return { rows: selected, allRows, totals, townCount: selected.length };
   }
 
   function updateBudgetDisplay(totals, townCount) {
-    els.budgetEstimateHouseholds.textContent = `${Math.round(totals.estimate).toLocaleString()} 世帯`;
-    els.budgetStatisticalHouseholds.textContent = `${Math.round(totals.statistical).toLocaleString()} 世帯`;
-    els.budgetBaseHouseholds.textContent = `${Math.round(totals.base).toLocaleString()} 世帯`;
+    els.budgetDeliverableTotal.textContent = `${Math.round(totals.deliverable).toLocaleString()} 箇所`;
+    els.budgetHouseholdsTotal.textContent = `${Math.round(totals.households).toLocaleString()} 世帯`;
     els.budgetTownCount.textContent = String(townCount);
   }
 
@@ -226,39 +228,28 @@ const DeliveryPlan = (() => {
       alert("商圏が設定されていません。商圏作成方法を選択し、範囲を指定してください。");
       return;
     }
+    const rank = RankEngine.getLast();
+    if (rank.mode === "none") {
+      alert("先に「条件を選択」でランキングに使う指標を選択してください。");
+      return;
+    }
     const selection = computeBudgetSelection(features);
     lastAnalysis = selection;
 
-    const colorByKeyCode = new Map();
-    selection.rows.forEach((r) => colorByKeyCode.set(r.feature.properties.KEY_CODE, "#2e7d32"));
-    AppMap.applyBoundaryColors(colorByKeyCode);
+    const selectedKeys = new Set(selection.rows.map((r) => r.key));
+    const hiddenKeyCodes = new Set();
+    features.forEach((f) => {
+      const key = f.properties?.KEY_CODE;
+      if (key && !selectedKeys.has(key)) hiddenKeyCodes.add(key);
+    });
+    AppMap.applyBoundaryColors(rank.colorByKeyCode, {
+      fallbackFill: NO_DATA_FILL,
+      fallbackBorder: NO_DATA_BORDER,
+      hiddenKeyCodes,
+    });
 
     updateBudgetDisplay(selection.totals, selection.townCount);
     if (!els.detailPanel.classList.contains("hidden")) renderDetailTable();
-  }
-
-  /**
-   * 簡易「逆引き分析」: 対象町丁目全体の統計上世帯数(掛け率適用前)から、
-   * 予算通数を満たすために必要な掛け率を逆算して自動入力する。
-   */
-  function reverseAnalysis() {
-    const features = AppMap.getActiveFeatures();
-    if (features.length === 0) {
-      alert("商圏が設定されていません。商圏作成方法を選択し、範囲を指定してください。");
-      return;
-    }
-    const excludeZero = els.excludeZero.checked;
-    const rows = features.filter((f) => !excludeZero || DataStore.getHouseholds(f) > 0);
-    const baseTotal = rows.reduce((sum, f) => sum + DataStore.getHouseholds(f), 0);
-    const budget = Number(els.budgetCount.value) || 0;
-    if (baseTotal <= 0) {
-      alert("対象エリアの世帯数が0のため、掛け率を逆算できません");
-      return;
-    }
-    const neededMultiplier = Math.min(200, Math.max(0, (budget / baseTotal) * 100));
-    els.budgetMultiplier.value = neededMultiplier.toFixed(1);
-    els.budgetModeStatistical.checked = true;
-    runAnalysis();
   }
 
   // ---------------- 明細 ----------------
@@ -285,8 +276,8 @@ const DeliveryPlan = (() => {
         const name = [f.properties?.CITY_NAME, f.properties?.S_NAME].filter(Boolean).join(" ") || f.properties?.KEY_CODE || "-";
         return `<tr>
           <td>${escapeHtml(name)}</td>
-          <td>${Math.round(r.households).toLocaleString()}</td>
-          <td>${Math.round(r.statisticalHouseholds).toLocaleString()}</td>
+          <td>${Math.round(r.deliverable).toLocaleString()}</td>
+          <td>${Math.round(r.statHouseholds).toLocaleString()}</td>
         </tr>`;
       })
       .join("");
@@ -310,12 +301,12 @@ const DeliveryPlan = (() => {
       alert("先に「分析開始」を実行してください");
       return;
     }
-    const header = ["町丁目", "KEY_CODE", "世帯数", "統計上世帯数"];
+    const header = ["町丁目", "KEY_CODE", "配達可能箇所数", "統計上世帯数"];
     const lines = [header.map(csvEscape).join(",")];
     lastAnalysis.rows.forEach((r) => {
       const f = r.feature;
       const name = [f.properties?.CITY_NAME, f.properties?.S_NAME].filter(Boolean).join(" ");
-      const cells = [name, f.properties?.KEY_CODE, Math.round(r.households), Math.round(r.statisticalHouseholds)];
+      const cells = [name, r.key, Math.round(r.deliverable), Math.round(r.statHouseholds)];
       lines.push(cells.map(csvEscape).join(","));
     });
     downloadCsv(lines.join("\n"), `配達プラン明細_${tsCompact()}.csv`);
@@ -342,14 +333,11 @@ const DeliveryPlan = (() => {
       timeMinutes: Number(document.getElementById("time-minutes")?.value) || 10,
       multiStoreIds: Panel.getCheckedMultiStoreIds(),
       multiRadius: Panel.getMultiStoreRadius(),
-      newspapers: Array.from(els.newspaperList.querySelectorAll(".np-check:checked")).map((cb) => cb.value),
-      coverageRate: Number(els.coverageRate.value) || 100,
       budget: {
         count: Number(els.budgetCount.value) || 0,
         selectAll: els.selectAllTowns.checked,
-        mode: els.budgetModeStatistical.checked ? "statistical" : "estimate",
+        mode: els.budgetModeHouseholds.checked ? "households" : "deliverable",
         excludeZero: els.excludeZero.checked,
-        multiplier: Number(els.budgetMultiplier.value) || 0,
       },
     };
   }
@@ -413,18 +401,11 @@ const DeliveryPlan = (() => {
       AppMap.setMultiStoreSelection(Panel.getCheckedMultiStoreIds());
     }
 
-    (state.newspapers || []).forEach((id) => {
-      const cb = els.newspaperList.querySelector(`.np-check[value="${id}"]`);
-      if (cb) cb.checked = true;
-    });
-    els.coverageRate.value = state.coverageRate ?? 100;
-
-    els.budgetCount.value = state.budget?.count ?? 10000;
+    els.budgetCount.value = state.budget?.count ?? 50000;
     els.selectAllTowns.checked = !!state.budget?.selectAll;
     els.excludeZero.checked = state.budget?.excludeZero !== false;
-    els.budgetMultiplier.value = state.budget?.multiplier ?? 70;
-    if (state.budget?.mode === "statistical") els.budgetModeStatistical.checked = true;
-    else els.budgetModeEstimate.checked = true;
+    if (state.budget?.mode === "households") els.budgetModeHouseholds.checked = true;
+    else els.budgetModeDeliverable.checked = true;
   }
 
   // ---------------- 保存・リセット ----------------
@@ -449,14 +430,11 @@ const DeliveryPlan = (() => {
   }
 
   function reset() {
-    els.newspaperList.querySelectorAll(".np-check").forEach((cb) => (cb.checked = false));
-    els.coverageRate.value = 100;
-    els.budgetCount.value = 10000;
+    els.budgetCount.value = 50000;
     els.selectAllTowns.checked = false;
-    els.budgetModeEstimate.checked = true;
+    els.budgetModeDeliverable.checked = true;
     els.excludeZero.checked = true;
-    els.budgetMultiplier.value = 70;
-    updateBudgetDisplay({ estimate: 0, statistical: 0, base: 0 }, 0);
+    updateBudgetDisplay({ deliverable: 0, households: 0 }, 0);
     lastAnalysis = null;
     els.detailPanel.classList.add("hidden");
     els.detailToggleBtn.textContent = "明細を表示";
@@ -464,7 +442,6 @@ const DeliveryPlan = (() => {
 
   function wireActions() {
     els.analyzeBtn.addEventListener("click", runAnalysis);
-    els.reverseBtn.addEventListener("click", reverseAnalysis);
     els.detailToggleBtn.addEventListener("click", toggleDetail);
     els.detailCsvBtn.addEventListener("click", exportDetailCsv);
     els.saveBtn.addEventListener("click", savePlan);
