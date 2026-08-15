@@ -325,10 +325,7 @@ const DeliveryPlan = (() => {
       zoneMethod,
       prefCode: document.getElementById("city-pref-select")?.value || "",
       selectedCities: Panel.getCheckedCityCodes(),
-      circleOriginStoreId: document.getElementById("circle-origin-store")?.value || "",
       circleRadius: Number(document.getElementById("circle-radius")?.value) || 500,
-      trainOriginStoreId: document.getElementById("train-origin-store")?.value || "",
-      timeOriginStoreId: document.getElementById("time-origin-store")?.value || "",
       timeMode: document.querySelector("#time-mode .seg-btn.active")?.dataset.mode || "walk",
       timeMinutes: Number(document.getElementById("time-minutes")?.value) || 10,
       multiStoreIds: Panel.getCheckedMultiStoreIds(),
@@ -366,17 +363,6 @@ const DeliveryPlan = (() => {
         radiusInput.value = state.circleRadius ?? 500;
         radiusInput.dispatchEvent(new Event("input"));
       }
-      const originSelect = document.getElementById("circle-origin-store");
-      if (state.circleOriginStoreId && originSelect) {
-        originSelect.value = state.circleOriginStoreId;
-        originSelect.dispatchEvent(new Event("change"));
-      }
-    } else if (state.zoneMethod === "train") {
-      const originSelect = document.getElementById("train-origin-store");
-      if (state.trainOriginStoreId && originSelect) {
-        originSelect.value = state.trainOriginStoreId;
-        originSelect.dispatchEvent(new Event("change"));
-      }
     } else if (state.zoneMethod === "time") {
       const modeBtn = document.querySelector(`#time-mode .seg-btn[data-mode="${state.timeMode || "walk"}"]`);
       if (modeBtn) modeBtn.click();
@@ -384,11 +370,6 @@ const DeliveryPlan = (() => {
       if (minutesInput) {
         minutesInput.value = state.timeMinutes ?? 10;
         minutesInput.dispatchEvent(new Event("input"));
-      }
-      const originSelect = document.getElementById("time-origin-store");
-      if (state.timeOriginStoreId && originSelect) {
-        originSelect.value = state.timeOriginStoreId;
-        originSelect.dispatchEvent(new Event("change"));
       }
     } else if (state.zoneMethod === "multiStore") {
       const multiRadius = document.getElementById("multistore-radius");
@@ -398,6 +379,7 @@ const DeliveryPlan = (() => {
         const cb = multiList?.querySelector(`.multi-store-check[value="${id}"]`);
         if (cb) cb.checked = true;
       });
+      Panel.syncMultiStoreSelectAll();
       AppMap.setMultiStoreSelection(Panel.getCheckedMultiStoreIds());
     }
 

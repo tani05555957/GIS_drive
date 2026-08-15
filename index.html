@@ -44,6 +44,10 @@
       <span class="app-subtitle">ver. 1.0</span>
     </div>
   </div>
+  <div class="app-header-summary" id="header-zone-summary">
+    <span class="header-summary-item">配達可能箇所数 <strong id="summary-deliverable">0</strong></span>
+    <span class="header-summary-item">統計上世帯数 <strong id="summary-stat-households">0</strong></span>
+  </div>
   <div class="app-header-right">
     <button id="header-store-btn" class="header-icon-btn" title="店舗管理"><i class="fa-solid fa-shop"></i></button>
   </div>
@@ -60,27 +64,7 @@
 
     <div class="panel-body">
 
-      <!-- 商圏サマリー(常時表示・表示中の商圏ポリゴンの合計) -->
-      <section class="panel-section" id="zone-summary-section">
-        <label class="section-title">商圏サマリー</label>
-        <div class="zone-summary-box">
-          <div class="zone-summary-row">
-            <span class="zone-summary-label">配達可能箇所数</span>
-            <span class="zone-summary-value-wrap">
-              <strong id="summary-deliverable">0</strong>
-              <span id="summary-deliverable-delta"></span>
-            </span>
-          </div>
-          <div class="zone-summary-row">
-            <span class="zone-summary-label">統計上世帯数</span>
-            <span class="zone-summary-value-wrap">
-              <strong id="summary-stat-households">0</strong>
-              <span id="summary-stat-households-delta"></span>
-            </span>
-          </div>
-        </div>
-        <div id="stats-csv-status" class="hint small"></div>
-      </section>
+      <div id="stats-csv-status" class="hint small"></div>
 
       <!-- 検索 -->
       <section class="panel-section">
@@ -111,30 +95,13 @@
 
         <!-- 円 -->
         <div class="shape-options hidden" id="opt-circle">
-          <label class="opt-label">起点店舗(任意)</label>
-          <select id="circle-origin-store" class="text-input"></select>
           <label class="opt-label">半径: <span id="circle-radius-val">500</span> m</label>
           <input type="range" id="circle-radius" min="100" max="5000" step="100" value="500">
-          <p class="hint">起点店舗を選ぶか、地図をクリックして中心を指定してください(Shift+クリックで複数のポイントを追加できます)。</p>
-
-          <div class="zone-sub">
-            <label class="opt-label">逆引き(配達可能箇所数・統計上世帯数から範囲を決定)</label>
-            <div class="segmented" id="circle-reverse-metric">
-              <button data-metric="deliverable" class="seg-btn active">配達可能箇所数</button>
-              <button data-metric="statHouseholds" class="seg-btn">統計上世帯数</button>
-            </div>
-            <div class="two-col">
-              <input type="number" id="circle-reverse-target" class="text-input" min="0" step="100" placeholder="目標値(例:10000)">
-              <button id="circle-reverse-btn" class="btn-secondary small" style="margin-top:0;">逆引きで組み合わせる</button>
-            </div>
-            <div id="circle-reverse-status" class="hint small"></div>
-          </div>
+          <p class="hint">地図をクリックして中心を指定してください(Shift+クリックで複数のポイントを追加できます)。店舗を起点にする場合は「多店舗分析」をご利用ください。</p>
         </div>
 
         <!-- 所要時間 -->
         <div class="shape-options hidden" id="opt-time">
-          <label class="opt-label">起点店舗(任意)</label>
-          <select id="time-origin-store" class="text-input"></select>
           <label class="opt-label">移動手段</label>
           <div class="segmented" id="time-mode">
             <button data-mode="walk" class="seg-btn active"><i class="fa-solid fa-person-walking"></i> 徒歩</button>
@@ -145,20 +112,7 @@
           <input type="range" id="time-minutes" min="1" max="60" step="1" value="10">
           <label class="opt-label">ORS APIキー(任意・道路network等時間圏)</label>
           <input type="text" id="ors-api-key" class="text-input" placeholder="未入力の場合は直線距離による近似円">
-          <p class="hint">起点店舗を選ぶか、地図をクリックして起点を指定してください(Shift+クリックで複数のポイントを追加できます)。</p>
-
-          <div class="zone-sub">
-            <label class="opt-label">逆引き(配達可能箇所数・統計上世帯数から範囲を決定)</label>
-            <div class="segmented" id="time-reverse-metric">
-              <button data-metric="deliverable" class="seg-btn active">配達可能箇所数</button>
-              <button data-metric="statHouseholds" class="seg-btn">統計上世帯数</button>
-            </div>
-            <div class="two-col">
-              <input type="number" id="time-reverse-target" class="text-input" min="0" step="100" placeholder="目標値(例:10000)">
-              <button id="time-reverse-btn" class="btn-secondary small" style="margin-top:0;">逆引きで組み合わせる</button>
-            </div>
-            <div id="time-reverse-status" class="hint small"></div>
-          </div>
+          <p class="hint">地図をクリックして起点を指定してください(Shift+クリックで複数のポイントを追加できます)。店舗を起点にする場合は「多店舗分析」をご利用ください。</p>
         </div>
 
         <!-- 任意商圏(自由描画) -->
@@ -169,23 +123,8 @@
 
         <!-- 電車 -->
         <div class="shape-options hidden" id="opt-train">
-          <label class="opt-label">起点店舗(任意)</label>
-          <select id="train-origin-store" class="text-input"></select>
-          <p class="hint">起点店舗を選ぶか、地図をクリックして起点(店舗等)を指定してください(Shift+クリックで複数のポイントを追加できます)。最寄り駅(Overpass API)を自動検索し、徒歩圏+概算鉄道到達圏を表示します。</p>
+          <p class="hint">地図をクリックして起点を指定してください(Shift+クリックで複数のポイントを追加できます)。最寄り駅(Overpass API)を自動検索し、徒歩圏+概算鉄道到達圏を表示します。店舗を起点にする場合は「多店舗分析」をご利用ください。</p>
           <div id="train-status" class="hint small"></div>
-
-          <div class="zone-sub">
-            <label class="opt-label">逆引き(配達可能箇所数・統計上世帯数から範囲を決定)</label>
-            <div class="segmented" id="train-reverse-metric">
-              <button data-metric="deliverable" class="seg-btn active">配達可能箇所数</button>
-              <button data-metric="statHouseholds" class="seg-btn">統計上世帯数</button>
-            </div>
-            <div class="two-col">
-              <input type="number" id="train-reverse-target" class="text-input" min="0" step="100" placeholder="目標値(例:10000)">
-              <button id="train-reverse-btn" class="btn-secondary small" style="margin-top:0;">逆引きで組み合わせる</button>
-            </div>
-            <div id="train-reverse-status" class="hint small"></div>
-          </div>
         </div>
 
         <!-- 市区町村 -->
@@ -200,10 +139,26 @@
         <!-- 多店舗分析 -->
         <div class="shape-options hidden" id="opt-multistore">
           <label class="opt-label">対象店舗(複数選択可)</label>
+          <label class="segment-option"><input type="checkbox" id="multistore-select-all"> すべて選択</label>
           <div id="multistore-list" class="checklist"></div>
           <label class="opt-label">半径(m)</label>
           <input type="number" id="multistore-radius" class="text-input" min="100" step="100" value="500">
         </div>
+      </section>
+
+      <!-- 配布数指定(逆引き: 配達可能箇所数・統計上世帯数の目標値から範囲を決定) -->
+      <section class="panel-section">
+        <div class="fw-section-bar">配布数指定</div>
+        <p class="hint small">配達可能箇所数・統計上世帯数の目標値から、地図上で指定した起点に近い町丁目を組み合わせて商圏範囲を決定します。先に地図クリック(または多店舗分析)で起点を指定してください。</p>
+        <div class="segmented" id="reverse-metric">
+          <button data-metric="deliverable" class="seg-btn active">配達可能箇所数</button>
+          <button data-metric="statHouseholds" class="seg-btn">統計上世帯数</button>
+        </div>
+        <div class="two-col">
+          <input type="number" id="reverse-target" class="text-input" min="0" step="100" placeholder="目標値(例:10000)">
+          <button id="reverse-btn" class="btn-secondary small" style="margin-top:0;">配布数を指定</button>
+        </div>
+        <div id="reverse-status" class="hint small"></div>
       </section>
 
       <!-- 町丁目境界の読み込み状況 -->

@@ -7,7 +7,6 @@ const Panel = (() => {
   let els = {};
   let currentShape = null;
   let cityUIBuilt = false;
-  let prevSummary = null; // { deliverable, statHouseholds } — 直前の商圏サマリー(増減表示用)
   let rankWindowManuallyClosed = false; // ランキングウィンドウをユーザーが閉じた場合、再表示を抑制する
 
   function escapeHtml(str) {
@@ -17,9 +16,7 @@ const Panel = (() => {
   function init() {
     els = {
       summaryDeliverable: document.getElementById("summary-deliverable"),
-      summaryDeliverableDelta: document.getElementById("summary-deliverable-delta"),
       summaryStatHouseholds: document.getElementById("summary-stat-households"),
-      summaryStatHouseholdsDelta: document.getElementById("summary-stat-households-delta"),
       statsCsvStatus: document.getElementById("stats-csv-status"),
 
       searchInput: document.getElementById("search-input"),
@@ -42,13 +39,9 @@ const Panel = (() => {
       cityPrefSelect: document.getElementById("city-pref-select"),
       cityChecklist: document.getElementById("city-checklist"),
 
-      circleOriginStore: document.getElementById("circle-origin-store"),
       circleRadius: document.getElementById("circle-radius"),
       circleRadiusVal: document.getElementById("circle-radius-val"),
 
-      trainOriginStore: document.getElementById("train-origin-store"),
-
-      timeOriginStore: document.getElementById("time-origin-store"),
       timeMode: document.getElementById("time-mode"),
       timeMinutes: document.getElementById("time-minutes"),
       timeMinutesVal: document.getElementById("time-minutes-val"),
@@ -57,6 +50,7 @@ const Panel = (() => {
       polygonUndo: document.getElementById("polygon-undo"),
 
       multiStoreList: document.getElementById("multistore-list"),
+      multiStoreSelectAll: document.getElementById("multistore-select-all"),
       multiStoreRadius: document.getElementById("multistore-radius"),
 
       conditionBtn: document.getElementById("condition-btn"),
@@ -92,9 +86,7 @@ const Panel = (() => {
     wireRankWindow();
     wireOriginPoints();
     wireCityMapClick();
-    wireReverseLookup("circle");
-    wireReverseLookup("time");
-    wireReverseLookup("train");
+    wireReverseLookup();
     AppMap.setFillOpacity(Number(els.fillOpacity.value) / 100);
   }
 
@@ -151,14 +143,11 @@ const Panel = (() => {
       await populateCityUI();
     } else if (shape === "circle") {
       els.optCircle.classList.remove("hidden");
-      populateStoreDropdown(els.circleOriginStore);
     } else if (shape === "train") {
       els.optTrain.classList.remove("hidden");
       els.trainStatus.textContent = "";
-      populateStoreDropdown(els.trainOriginStore);
     } else if (shape === "time") {
       els.optTime.classList.remove("hidden");
-      populateStoreDropdown(els.timeOriginStore);
     } else if (shape === "polygon") {
       els.optPolygon.classList.remove("hidden");
     } else if (shape === "multiStore") {
@@ -188,24 +177,6 @@ const Panel = (() => {
       els.originPointsCount.textContent = String(count);
     });
     els.originPointsClear.addEventListener("click", () => AppMap.clearOriginPoints());
-  }
-
-  // ---------------- 起点店舗セレクト(円・電車・所要時間で共通) ----------------
-  function populateStoreDropdown(selectEl) {
-    const stores = StoreManager.getStores();
-    const prev = selectEl.value;
-    selectEl.innerHTML =
-      `<option value="">(地図をクリックして指定)</option>` +
-      stores.map((s) => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
-    if (stores.some((s) => s.id === prev)) selectEl.value = prev;
-  }
-
-  function wireOriginStoreSelect(selectEl) {
-    selectEl.addEventListener("change", () => {
-      if (!selectEl.value) return;
-      const store = StoreManager.getStoreById(selectEl.value);
-      if (store) AppMap.setOriginPoint(L.latLng(store.lat, store.lon));
-    });
   }
 
   // ---------------- 市区町村 ----------------
@@ -289,12 +260,10 @@ const Panel = (() => {
       els.circleRadiusVal.textContent = v;
       AppMap.setCircleRadius(v);
     });
-    wireOriginStoreSelect(els.circleOriginStore);
   }
 
   // ---------------- 電車(新規) ----------------
   function wireTrainOptions() {
-    wireOriginStoreSelect(els.trainOriginStore);
     AppMap.on("trainLoading", () => {
       els.trainStatus.textContent = "最寄り駅を検索中…";
     });
@@ -329,20 +298,18 @@ const Panel = (() => {
       rebuildTimeShape();
     });
     els.orsApiKey.addEventListener("change", rebuildTimeShape);
-
-    wireOriginStoreSelect(els.timeOriginStore);
   }
 
-  // ---------------- 逆引き(円・所要時間・電車で共通) ----------------
+  // ---------------- 配布数指定(逆引き。独立セクションとして地図上の起点にのみ依存する) ----------------
   /**
    * 配達可能箇所数/統計上世帯数の目標値から、起点に近い町丁目を組み合わせて範囲を決定する。
-   * 半径・所要時間・起点の指定とは別に、対象町丁目を直接算出して商圏として反映する。
+   * 円・所要時間・電車のいずれの半径/所要時間の指定とも独立して、対象町丁目を直接算出して商圏として反映する。
    */
-  function wireReverseLookup(prefix) {
-    const metricSeg = document.getElementById(`${prefix}-reverse-metric`);
-    const targetInput = document.getElementById(`${prefix}-reverse-target`);
-    const btn = document.getElementById(`${prefix}-reverse-btn`);
-    const status = document.getElementById(`${prefix}-reverse-status`);
+  function wireReverseLookup() {
+    const metricSeg = document.getElementById("reverse-metric");
+    const targetInput = document.getElementById("reverse-target");
+    const btn = document.getElementById("reverse-btn");
+    const status = document.getElementById("reverse-status");
     let metric = "deliverable";
 
     metricSeg.querySelectorAll(".seg-btn").forEach((b) => {
@@ -389,10 +356,17 @@ const Panel = (() => {
     els.multiStoreRadius.addEventListener("change", () => {
       if (currentShape === "multiStore") onMultiStoreCheckChange();
     });
+    els.multiStoreSelectAll.addEventListener("change", () => {
+      const checked = els.multiStoreSelectAll.checked;
+      els.multiStoreList.querySelectorAll(".multi-store-check").forEach((cb) => (cb.checked = checked));
+      onMultiStoreCheckChange();
+    });
   }
 
   function populateMultiStoreList() {
     const stores = StoreManager.getStores();
+    els.multiStoreSelectAll.checked = false;
+    els.multiStoreSelectAll.indeterminate = false;
     els.multiStoreList.innerHTML =
       stores
         .map((s) => `<label><input type="checkbox" class="multi-store-check" value="${s.id}"> ${escapeHtml(s.name)}</label>`)
@@ -400,7 +374,15 @@ const Panel = (() => {
     els.multiStoreList.querySelectorAll(".multi-store-check").forEach((cb) => cb.addEventListener("change", onMultiStoreCheckChange));
   }
 
+  function updateMultiStoreSelectAllState() {
+    const boxes = Array.from(els.multiStoreList.querySelectorAll(".multi-store-check"));
+    const checkedCount = boxes.filter((cb) => cb.checked).length;
+    els.multiStoreSelectAll.checked = boxes.length > 0 && checkedCount === boxes.length;
+    els.multiStoreSelectAll.indeterminate = checkedCount > 0 && checkedCount < boxes.length;
+  }
+
   function onMultiStoreCheckChange() {
+    updateMultiStoreSelectAllState();
     const ids = Array.from(els.multiStoreList.querySelectorAll(".multi-store-check:checked")).map((cb) => cb.value);
     AppMap.setMultiStoreSelection(ids);
   }
@@ -411,6 +393,11 @@ const Panel = (() => {
 
   function getMultiStoreRadius() {
     return Number(els.multiStoreRadius.value) || 500;
+  }
+
+  /** プラン複製時など、チェックボックスへ直接 checked を設定した後に「すべて選択」の状態を再同期する */
+  function syncMultiStoreSelectAll() {
+    updateMultiStoreSelectAllState();
   }
 
   // ---------------- 検索 ----------------
@@ -585,15 +572,8 @@ const Panel = (() => {
     showRankWindow();
   }
 
-  // ---------------- 商圏サマリー(サイドバー上部・配達可能箇所数/統計上世帯数) ----------------
-  function formatDelta(delta) {
-    if (!delta) return "";
-    const cls = delta > 0 ? "up" : "down";
-    const sign = delta > 0 ? "+" : "";
-    return `<span class="zone-summary-delta ${cls}">${sign}${Math.round(delta).toLocaleString()}</span>`;
-  }
-
-  /** 現在表示中の商圏ポリゴン(features)から配達可能箇所数・統計上世帯数の合計を集計し、増減付きで表示する */
+  // ---------------- 商圏サマリー(ヘッダー常時表示・配達可能箇所数/統計上世帯数) ----------------
+  /** 現在表示中の商圏ポリゴン(features)から配達可能箇所数・統計上世帯数の合計を集計して表示する */
   function updateZoneSummary(features) {
     let deliverable = 0;
     let statHouseholds = 0;
@@ -606,15 +586,6 @@ const Panel = (() => {
 
     els.summaryDeliverable.textContent = Math.round(deliverable).toLocaleString();
     els.summaryStatHouseholds.textContent = Math.round(statHouseholds).toLocaleString();
-
-    if (prevSummary) {
-      els.summaryDeliverableDelta.innerHTML = formatDelta(deliverable - prevSummary.deliverable);
-      els.summaryStatHouseholdsDelta.innerHTML = formatDelta(statHouseholds - prevSummary.statHouseholds);
-    } else {
-      els.summaryDeliverableDelta.innerHTML = "";
-      els.summaryStatHouseholdsDelta.innerHTML = "";
-    }
-    prevSummary = { deliverable, statHouseholds };
   }
 
   function setStatsCsvStatus(text) {
@@ -657,9 +628,6 @@ const Panel = (() => {
       els.circleRadiusVal.textContent = 500;
       els.timeMinutes.value = 10;
       els.timeMinutesVal.textContent = 10;
-      els.circleOriginStore.value = "";
-      els.trainOriginStore.value = "";
-      els.timeOriginStore.value = "";
       if (typeof DeliveryPlan !== "undefined") DeliveryPlan.reset();
       if (onReset) onReset();
     });
@@ -677,6 +645,7 @@ const Panel = (() => {
     getCheckedCityCodes,
     getCheckedMultiStoreIds,
     getMultiStoreRadius,
+    syncMultiStoreSelectAll,
     setConditionEnabled,
     getSelections,
     onSelectionsChanged,

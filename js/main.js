@@ -13,8 +13,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // 「条件を選択」のランキングに使う実統計データ(統計データ/*.csv)を読み込む
   Panel.setStatsCsvStatus("統計データを読み込み中…");
   StatsData.loadFromUrl(STAT_CSV_PATH)
-    .then((count) => {
-      Panel.setStatsCsvStatus(`統計データ読み込み完了(${count.toLocaleString()}件、東京都)`);
+    .then(() => {
+      Panel.setStatsCsvStatus("");
       recompute();
     })
     .catch((err) => {
