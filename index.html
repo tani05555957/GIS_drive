@@ -49,7 +49,23 @@
     <span class="header-summary-item">統計上世帯数 <strong id="summary-stat-households">0</strong></span>
   </div>
   <div class="app-header-right">
-    <button id="header-store-btn" class="header-icon-btn" title="店舗管理"><i class="fa-solid fa-shop"></i></button>
+    <div class="header-plan-menu">
+      <button id="header-save-btn" class="header-btn">保存</button>
+      <div id="header-save-dropdown" class="header-dropdown hidden">
+        <label class="opt-label" style="margin-top:0;">プラン名</label>
+        <input type="text" id="header-save-name" class="text-input" placeholder="プラン名">
+        <button id="header-save-confirm-btn" class="btn-primary small" style="width:100%;">保存する</button>
+      </div>
+    </div>
+    <div class="header-plan-menu">
+      <button id="header-resume-btn" class="header-btn">再開</button>
+      <div id="header-resume-dropdown" class="header-dropdown hidden">
+        <input type="text" id="header-resume-search" class="text-input" placeholder="プラン名で検索">
+        <ul id="header-resume-list" class="search-results"></ul>
+      </div>
+    </div>
+    <button id="header-customer-btn" class="header-btn">顧客データ読込</button>
+    <button id="header-store-btn" class="header-btn">店舗管理</button>
   </div>
 </header>
 
@@ -96,7 +112,7 @@
         <!-- 円 -->
         <div class="shape-options hidden" id="opt-circle">
           <label class="opt-label">半径: <span id="circle-radius-val">500</span> m</label>
-          <input type="range" id="circle-radius" min="100" max="5000" step="100" value="500">
+          <input type="range" id="circle-radius" min="100" max="10000" step="100" value="500">
           <p class="hint">地図をクリックして中心を指定してください(Shift+クリックで複数のポイントを追加できます)。店舗を起点にする場合は「多店舗分析」をご利用ください。</p>
         </div>
 
@@ -141,24 +157,9 @@
           <label class="opt-label">対象店舗(複数選択可)</label>
           <label class="segment-option"><input type="checkbox" id="multistore-select-all"> すべて選択</label>
           <div id="multistore-list" class="checklist"></div>
-          <label class="opt-label">半径(m)</label>
-          <input type="number" id="multistore-radius" class="text-input" min="100" step="100" value="500">
+          <label class="opt-label">半径: <span id="multistore-radius-val">500</span> m</label>
+          <input type="range" id="multistore-radius" min="100" max="10000" step="100" value="500">
         </div>
-      </section>
-
-      <!-- 配布数指定(逆引き: 配達可能箇所数・統計上世帯数の目標値から範囲を決定) -->
-      <section class="panel-section">
-        <div class="fw-section-bar">配布数指定</div>
-        <p class="hint small">配達可能箇所数・統計上世帯数の目標値から、地図上で指定した起点に近い町丁目を組み合わせて商圏範囲を決定します。先に地図クリック(または多店舗分析)で起点を指定してください。</p>
-        <div class="segmented" id="reverse-metric">
-          <button data-metric="deliverable" class="seg-btn active">配達可能箇所数</button>
-          <button data-metric="statHouseholds" class="seg-btn">統計上世帯数</button>
-        </div>
-        <div class="two-col">
-          <input type="number" id="reverse-target" class="text-input" min="0" step="100" placeholder="目標値(例:10000)">
-          <button id="reverse-btn" class="btn-secondary small" style="margin-top:0;">配布数を指定</button>
-        </div>
-        <div id="reverse-status" class="hint small"></div>
       </section>
 
       <!-- 町丁目境界の読み込み状況 -->
@@ -199,7 +200,7 @@
         <div class="fw-section-bar">予算通数の指定</div>
         <label class="opt-label">予算通数を指定してください。</label>
         <div class="two-col">
-          <input type="number" id="budget-count" class="text-input" min="0" step="100" value="50000">
+          <input type="number" id="budget-count" class="text-input" min="0" step="100" placeholder="目標値(例:50000)">
           <label class="segment-option"><input type="checkbox" id="select-all-towns"> 全町丁目を選択</label>
         </div>
         <p class="hint small">
@@ -222,7 +223,7 @@
           <span id="budget-town-count" class="budget-value">0</span>
         </div>
 
-        <button id="analyze-btn" class="btn-primary"><i class="fa-solid fa-play"></i> 分析開始</button>
+        <button id="analyze-btn" class="btn-primary"><i class="fa-solid fa-play"></i> 実行</button>
         <button id="detail-toggle-btn" class="btn-secondary small">明細を表示</button>
         <div id="detail-panel" class="hidden">
           <div class="detail-table-wrap">
@@ -235,27 +236,9 @@
         </div>
       </section>
 
-      <!-- 保存 -->
-      <section class="panel-section">
-        <label class="section-title">プラン保存</label>
-        <input type="text" id="save-plan-name" class="text-input" placeholder="プラン名">
-        <button id="save-plan-btn" class="btn-primary" style="margin-top:6px;"><i class="fa-solid fa-floppy-disk"></i> 保存</button>
-      </section>
-
-      <!-- データ / レポート -->
-      <section class="panel-section">
-        <label class="section-title">属性データ(世帯セグメント)</label>
-        <label class="btn-secondary file-btn">
-          <i class="fa-solid fa-file-import"></i> 属性データ読み込み(JSON)
-          <input type="file" id="stats-file" accept=".json" class="hidden-file">
-        </label>
-        <div id="stats-status" class="hint">未読み込み(千代田区周辺のサンプルデータ表示中)</div>
-        <p class="hint small">町丁目の境界・世帯数は boundaries/ の実データを自動で使用します。ここで読み込むのは KEY_CODE に対応した属性内訳(性別年代・年収など)のみです。</p>
-      </section>
-
       <section class="panel-section">
         <label class="section-title">レポート出力</label>
-        <button id="report-btn" class="btn-secondary"><i class="fa-solid fa-download"></i> 画面をレポート画像として保存</button>
+        <button id="report-btn" class="btn-secondary"><i class="fa-solid fa-download"></i> レポート出力</button>
       </section>
 
       <section class="panel-section">
@@ -316,7 +299,7 @@
       </div>
       <button id="store-csv-template-btn" class="btn-secondary small"><i class="fa-solid fa-circle-info"></i> 取込用CSVフォーマットをダウンロード</button>
       <input type="file" id="store-csv-input" accept=".csv" class="hidden">
-      <p class="hint small">CSV列: 店舗番号(必須)・店舗名(必須)・住所(必須)・配布部数(任意)。住所は国土地理院ジオコーディングAPI(失敗時はOpenStreetMap)で自動的に緯度経度へ変換されます。</p>
+      <p class="hint small">CSV列: 店舗番号(必須)・店舗名(必須)・住所(必須)・配布部数(任意)。住所は国土地理院ジオコーディングAPI(失敗時はOpenStreetMap)で自動的に緯度経度へ変換されます。都道府県・市区町村レベルまでしか判定できなかった住所は町字エラーとして取込対象から除外されます。</p>
 
       <div id="store-form" class="inline-form hidden">
         <label class="opt-label">店舗番号</label>
@@ -349,8 +332,8 @@
             <input type="number" id="store-form-count" class="text-input" min="0" step="100" value="0">
           </div>
           <div>
-            <label class="opt-label">半径(m)</label>
-            <input type="number" id="store-form-radius" class="text-input" min="100" step="100" value="500">
+            <label class="opt-label">半径: <span id="store-form-radius-val">500</span> m</label>
+            <input type="range" id="store-form-radius" min="100" max="10000" step="100" value="500">
           </div>
         </div>
         <div class="fw-inline-actions">
@@ -371,8 +354,8 @@
       <div class="fw-section-bar">地図への一括描画</div>
       <div class="two-col">
         <div>
-          <label class="opt-label">半径(m)</label>
-          <input type="number" id="store-draw-radius" class="text-input" min="100" step="100" value="500">
+          <label class="opt-label">半径: <span id="store-draw-radius-val">500</span> m</label>
+          <input type="range" id="store-draw-radius" min="100" max="10000" step="100" value="500">
         </div>
         <div style="display:flex;align-items:flex-end;gap:6px;">
           <button id="store-draw-btn" class="btn-secondary small">選択店舗を描画</button>
@@ -431,6 +414,31 @@
   </div>
 </div>
 
+<!-- ========== 顧客データ管理ウィンドウ ========== -->
+<div id="customer-mgr-window" class="floating-window hidden">
+  <div class="fw-header">
+    <span><i class="fa-solid fa-users"></i> 顧客データ管理</span>
+    <span class="fw-header-actions">
+      <i class="fa-solid fa-window-minimize fw-min" id="customer-mgr-min" title="最小化"></i>
+      <i class="fa-solid fa-xmark fw-close" id="customer-mgr-close" title="閉じる"></i>
+    </span>
+  </div>
+  <div class="fw-body">
+    <div class="fw-inline-actions">
+      <button id="customer-csv-import-btn" class="btn-secondary small"><i class="fa-solid fa-file-arrow-up"></i> CSVから取込</button>
+      <button id="customer-csv-export-btn" class="btn-secondary small"><i class="fa-solid fa-file-arrow-down"></i> CSVエクスポート</button>
+    </div>
+    <button id="customer-csv-template-btn" class="btn-secondary small"><i class="fa-solid fa-circle-info"></i> 取込用CSVフォーマットをダウンロード</button>
+    <input type="file" id="customer-csv-input" accept=".csv" class="hidden">
+    <p class="hint small">CSV列: 顧客番号(任意)・郵便番号(任意)・住所(任意)。顧客番号が未入力の行には10000001から始まるユニークコードを自動付与します。郵便番号または住所を国土地理院/OpenStreetMapでジオコーディングし、町字(丁目)レベルまで判定できなかった場合は町字エラーとして取込対象から除外されます。</p>
+    <div class="budget-row"><span class="opt-label" style="margin:0;">登録件数</span><span id="customer-summary" class="budget-value">0 件</span></div>
+    <table class="data-table">
+      <thead><tr><th>顧客番号</th><th>郵便番号</th><th>住所</th><th>紐づけレベル</th><th>更新日時</th><th></th></tr></thead>
+      <tbody id="customer-table-body"></tbody>
+    </table>
+  </div>
+</div>
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
@@ -443,9 +451,9 @@
 <script src="js/dataStore.js"></script>
 <script src="js/boundaryLoader.js"></script>
 <script src="js/shapeBuilders.js"></script>
-<script src="js/reverseLookup.js"></script>
 <script src="js/map.js"></script>
 <script src="js/storeManager.js"></script>
+<script src="js/customerManager.js"></script>
 <script src="js/panel.js"></script>
 <script src="js/deliveryPlan.js"></script>
 <script src="js/report.js"></script>

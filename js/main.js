@@ -5,6 +5,7 @@ document.addEventListener("DOMContentLoaded", () => {
   AppMap.init("map");
   Panel.init();
   StoreManager.init();
+  CustomerManager.init();
   DeliveryPlan.init();
 
   // 初期表示: サンプル属性データ(千代田区の実KEY_CODEベース、配達プランの指標ツリー用)を読み込み
@@ -23,7 +24,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   Panel.wireSearch();
 
-  Panel.wireStatsFile(() => recompute());
   Panel.onSelectionsChanged(() => recompute());
   Panel.wireReportButton(() => DeliveryPlan.exportReportBundle());
   Panel.wireReset();
@@ -189,10 +189,6 @@ document.addEventListener("DOMContentLoaded", () => {
   AppMap.on("shapeCleared", () => {
     Panel.setConditionEnabled(false);
     refreshBoundaries();
-  });
-  AppMap.on("reverseLookupApplied", () => {
-    Panel.setConditionEnabled(AppMap.isShapeReady());
-    recompute();
   });
   AppMap.onMoveEnd(
     debounce(() => {

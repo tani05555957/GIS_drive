@@ -97,6 +97,7 @@ const StoreManager = (() => {
       formArea: document.getElementById("store-form-area"),
       formCount: document.getElementById("store-form-count"),
       formRadius: document.getElementById("store-form-radius"),
+      formRadiusVal: document.getElementById("store-form-radius-val"),
       formSave: document.getElementById("store-form-save"),
       formCancel: document.getElementById("store-form-cancel"),
       tableBody: document.getElementById("store-table-body"),
@@ -107,6 +108,7 @@ const StoreManager = (() => {
       csvInput: document.getElementById("store-csv-input"),
 
       drawRadius: document.getElementById("store-draw-radius"),
+      drawRadiusVal: document.getElementById("store-draw-radius-val"),
       drawBtn: document.getElementById("store-draw-btn"),
       applyAllBtn: document.getElementById("store-apply-all-btn"),
       labelToggle: document.getElementById("store-label-toggle"),
@@ -131,6 +133,12 @@ const StoreManager = (() => {
     wireGroupForm();
     wireDrawControls();
     wireCsv();
+    els.formRadius.addEventListener("input", () => {
+      els.formRadiusVal.textContent = els.formRadius.value;
+    });
+    els.drawRadius.addEventListener("input", () => {
+      els.drawRadiusVal.textContent = els.drawRadius.value;
+    });
 
     renderGroupSelect();
     renderStoreTable();
@@ -235,6 +243,7 @@ const StoreManager = (() => {
     els.formLon.value = s?.lon != null ? s.lon.toFixed(6) : "";
     els.formCount.value = s?.distributionCount ?? 0;
     els.formRadius.value = s?.radius ?? 500;
+    els.formRadiusVal.textContent = els.formRadius.value;
     pendingLinkedArea = s?.linkedAreaName ? { name: s.linkedAreaName, code: s.linkedAreaCode } : null;
     pendingGeocodeSource = s?.geocodeSource || null;
     els.formArea.value = pendingLinkedArea?.name || "";
@@ -603,6 +612,19 @@ const StoreManager = (() => {
         geo = null;
       }
 
+      if (!geo || geo.level !== "town") {
+        ngCount++;
+        ngRows.push(
+          `${i + 2}行目 (${storeNo} ${name}): ` +
+            (geo
+              ? "町字エラー(市区町村・都道府県レベルまでしか判定できなかったため除外しました)"
+              : "住所からジオコーディングできませんでした")
+        );
+        await sleep(200);
+        continue;
+      }
+
+      okCount++;
       const now = new Date().toISOString();
       const store = {
         id: uid(),
@@ -610,31 +632,24 @@ const StoreManager = (() => {
         name,
         groupId: defaultGroupId,
         address,
-        lat: geo?.lat ?? null,
-        lon: geo?.lon ?? null,
+        lat: geo.lat,
+        lon: geo.lon,
         distributionCount: count,
         radius: 500,
-        geocodeSource: geo?.source || null,
+        geocodeSource: geo.source,
         linkedAreaName: null,
         linkedAreaCode: null,
         createdAt: now,
         updatedAt: now,
       };
-
-      if (geo) {
-        okCount++;
-        try {
-          const area = await BoundaryLoader.findMunicipalityAtPoint(geo.lat, geo.lon);
-          if (area) {
-            store.linkedAreaName = `${area.prefName || ""}${area.name || ""}`;
-            store.linkedAreaCode = area.code;
-          }
-        } catch (e) {
-          // エリア判定に失敗しても緯度経度は保持する
+      try {
+        const area = await BoundaryLoader.findMunicipalityAtPoint(geo.lat, geo.lon);
+        if (area) {
+          store.linkedAreaName = `${area.prefName || ""}${area.name || ""}`;
+          store.linkedAreaCode = area.code;
         }
-      } else {
-        ngCount++;
-        ngRows.push(`${i + 2}行目 (${storeNo} ${name}): 住所からジオコーディングできませんでした`);
+      } catch (e) {
+        // エリア判定に失敗しても緯度経度は保持する
       }
 
       stores.push(store);
@@ -646,7 +661,7 @@ const StoreManager = (() => {
     els.csvImportBtn.disabled = false;
     els.csvImportBtn.innerHTML = '<i class="fa-solid fa-file-arrow-up"></i> CSVから取込';
 
-    let msg = `取込完了: 成功 ${okCount}件 / 失敗 ${ngCount}件`;
+    let msg = `取込完了: 成功 ${okCount}件 / 町字エラー等で除外 ${ngCount}件`;
     if (ngRows.length > 0) {
       msg += "\n\n" + ngRows.slice(0, 20).join("\n");
       if (ngRows.length > 20) msg += `\n...他${ngRows.length - 20}件`;

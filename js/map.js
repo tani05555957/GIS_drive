@@ -115,7 +115,44 @@ const AppMap = (() => {
       label: d.display_name,
       lat: parseFloat(d.lat),
       lon: parseFloat(d.lon),
+      addresstype: d.addresstype,
     }));
+  }
+
+  // ---------------- ジオコーディング結果の粒度判定 ----------------
+  // 「どこまで紐づけられたか」を判定し、店舗・顧客データの取込で市区町村・都道府県レベルの
+  // 粗いジオコーディング結果(=町字エラー)を除外するために使う。
+  const NOMINATIM_CITY_TYPES = new Set(["city", "town", "village", "municipality", "county"]);
+  const NOMINATIM_PREF_TYPES = new Set(["state", "province", "region", "country"]);
+
+  /**
+   * 国土地理院ジオコーディング結果(title)が実際にどの粒度まで一致したかを、
+   * 町丁目境界データ(BoundaryLoader)と突き合わせて判定する。
+   * title が「都道府県+市区町村」の文字列と完全一致する場合は市区町村までしか一致していない。
+   */
+  async function classifyGsiLevel(lat, lon, title) {
+    if (!title) return "none";
+    let municipality = null;
+    try {
+      municipality = await BoundaryLoader.findMunicipalityAtPoint(lat, lon);
+    } catch (e) {
+      municipality = null;
+    }
+    if (!municipality) {
+      return /^[^都道府県]*[都道府県]$/.test(title) ? "prefecture" : "city";
+    }
+    const cityFull = `${municipality.prefName || ""}${municipality.name || ""}`;
+    if (title === municipality.prefName) return "prefecture";
+    if (title === cityFull) return "city";
+    return "town";
+  }
+
+  /** Nominatim結果(addresstype)がどの粒度まで一致したかを判定する */
+  function classifyNominatimLevel(addresstype) {
+    if (!addresstype) return "none";
+    if (NOMINATIM_CITY_TYPES.has(addresstype)) return "city";
+    if (NOMINATIM_PREF_TYPES.has(addresstype)) return "prefecture";
+    return "town";
   }
 
   // ---------------- 検索 (国土地理院 地名検索API) ----------------
@@ -136,20 +173,30 @@ const AppMap = (() => {
   }
 
   /**
-   * 住所から座標を取得する統合ジオコーディング。国土地理院APIを優先し、
-   * 該当なし・エラー時は Nominatim にフォールバックする。店舗の住所ジオコーディング用。
+   * 住所(または郵便番号)から座標を取得する統合ジオコーディング。国土地理院APIを優先し、
+   * 該当なし・エラー時は Nominatim にフォールバックする(郵便番号は国土地理院APIが非対応のため
+   * 自動的に Nominatim側で解決される)。店舗・顧客データの住所ジオコーディング用。
+   * 戻り値の level は "town"(町字・丁目以下まで一致)/ "city"(市区町村まで)/
+   * "prefecture"(都道府県まで)/ "none"(判定不能)のいずれか。
    */
   async function geocodeAddress(query) {
     if (!query || !query.trim()) return null;
     try {
       const gsiResults = await geocodeGsi(query);
-      if (gsiResults.length > 0) return { ...gsiResults[0], source: "gsi" };
+      if (gsiResults.length > 0) {
+        const r = gsiResults[0];
+        const level = await classifyGsiLevel(r.lat, r.lon, r.label);
+        return { ...r, source: "gsi", level };
+      }
     } catch (e) {
       // フォールバックへ
     }
     try {
       const nomResults = await geocodeSearch(query);
-      if (nomResults.length > 0) return { ...nomResults[0], source: "nominatim" };
+      if (nomResults.length > 0) {
+        const r = nomResults[0];
+        return { ...r, source: "nominatim", level: classifyNominatimLevel(r.addresstype) };
+      }
     } catch (e) {
       // 両方失敗した場合は null を返す
     }
@@ -526,16 +573,6 @@ const AppMap = (() => {
     return renderedFeatures;
   }
 
-  /**
-   * 逆引き分析(ReverseLookup)の結果を、現在の商圏として直接反映する。
-   * 通常の図形(円/所要時間/電車)交差判定を経由せず、算出済みのfeature一覧をそのまま表示・集計対象にする。
-   * ユーザーが半径・起点等を変更すれば、通常のshapeUpdatedフローで自動的に上書きされる。
-   */
-  function applyReverseLookupResult(features) {
-    renderBoundaryFeatures(features);
-    emit("reverseLookupApplied", features.length);
-  }
-
   // ---------------- 店舗管理レイヤー(新規) ----------------
   /** 登録店舗のマーカーを描画する。groupsById: Map<groupId, Group> */
   function renderStoreMarkers(stores, groupsById, opts = {}) {
@@ -613,7 +650,6 @@ const AppMap = (() => {
     getBoundaryFeatures,
     getActiveFeatures,
     applyBoundaryColors,
-    applyReverseLookupResult,
     setFillOpacity,
     getCurrentShapeInfo,
     isShapeReady,

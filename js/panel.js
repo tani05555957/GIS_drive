@@ -52,6 +52,7 @@ const Panel = (() => {
       multiStoreList: document.getElementById("multistore-list"),
       multiStoreSelectAll: document.getElementById("multistore-select-all"),
       multiStoreRadius: document.getElementById("multistore-radius"),
+      multiStoreRadiusVal: document.getElementById("multistore-radius-val"),
 
       conditionBtn: document.getElementById("condition-btn"),
       segmentPanel: document.getElementById("segment-panel"),
@@ -66,8 +67,6 @@ const Panel = (() => {
       fillOpacity: document.getElementById("fill-opacity"),
       fillOpacityVal: document.getElementById("fill-opacity-val"),
 
-      statsFile: document.getElementById("stats-file"),
-      statsStatus: document.getElementById("stats-status"),
       boundaryStatus: document.getElementById("boundary-status"),
 
       reportBtn: document.getElementById("report-btn"),
@@ -86,7 +85,6 @@ const Panel = (() => {
     wireRankWindow();
     wireOriginPoints();
     wireCityMapClick();
-    wireReverseLookup();
     AppMap.setFillOpacity(Number(els.fillOpacity.value) / 100);
   }
 
@@ -300,52 +298,6 @@ const Panel = (() => {
     els.orsApiKey.addEventListener("change", rebuildTimeShape);
   }
 
-  // ---------------- 配布数指定(逆引き。独立セクションとして地図上の起点にのみ依存する) ----------------
-  /**
-   * 配達可能箇所数/統計上世帯数の目標値から、起点に近い町丁目を組み合わせて範囲を決定する。
-   * 円・所要時間・電車のいずれの半径/所要時間の指定とも独立して、対象町丁目を直接算出して商圏として反映する。
-   */
-  function wireReverseLookup() {
-    const metricSeg = document.getElementById("reverse-metric");
-    const targetInput = document.getElementById("reverse-target");
-    const btn = document.getElementById("reverse-btn");
-    const status = document.getElementById("reverse-status");
-    let metric = "deliverable";
-
-    metricSeg.querySelectorAll(".seg-btn").forEach((b) => {
-      b.addEventListener("click", () => {
-        metric = b.dataset.metric;
-        metricSeg.querySelectorAll(".seg-btn").forEach((x) => x.classList.toggle("active", x === b));
-      });
-    });
-
-    btn.addEventListener("click", async () => {
-      const target = Number(targetInput.value);
-      if (!target || target <= 0) {
-        status.textContent = "目標値を入力してください";
-        return;
-      }
-      const points = AppMap.getOriginPoints();
-      if (points.length === 0) {
-        status.textContent = "先に地図上でポイントを指定してください";
-        return;
-      }
-      status.textContent = "計算中…";
-      btn.disabled = true;
-      try {
-        const result = await ReverseLookup.forPoints(points, target, metric);
-        AppMap.applyReverseLookupResult(result.features);
-        status.textContent = result.allReached
-          ? `${result.features.length.toLocaleString()} 町丁目を組み合わせました`
-          : `${result.features.length.toLocaleString()} 町丁目を組み合わせましたが、探索範囲内で目標値に届きませんでした`;
-      } catch (err) {
-        status.textContent = `エラー: ${err.message}`;
-      } finally {
-        btn.disabled = false;
-      }
-    });
-  }
-
   // ---------------- 任意商圏(自由描画) ----------------
   function wirePolygonOptions() {
     els.polygonUndo.addEventListener("click", () => AppMap.undoPolygonPoint());
@@ -353,6 +305,9 @@ const Panel = (() => {
 
   // ---------------- 多店舗分析 ----------------
   function wireMultiStoreOptions() {
+    els.multiStoreRadius.addEventListener("input", () => {
+      els.multiStoreRadiusVal.textContent = els.multiStoreRadius.value;
+    });
     els.multiStoreRadius.addEventListener("change", () => {
       if (currentShape === "multiStore") onMultiStoreCheckChange();
     });
@@ -592,26 +547,6 @@ const Panel = (() => {
     if (els.statsCsvStatus) els.statsCsvStatus.textContent = text;
   }
 
-  // ---------------- 属性データ状態表示 ----------------
-  function wireStatsFile(onLoad) {
-    els.statsFile.addEventListener("change", (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        try {
-          const json = JSON.parse(reader.result);
-          const count = DataStore.loadSegmentTable(json);
-          els.statsStatus.textContent = `読み込み完了: ${file.name}(${count}件)`;
-          if (onLoad) onLoad();
-        } catch (err) {
-          els.statsStatus.textContent = `読み込みエラー: ${err.message}`;
-        }
-      };
-      reader.readAsText(file, "utf-8");
-    });
-  }
-
   function setBoundaryStatus(text) {
     els.boundaryStatus.textContent = text;
   }
@@ -656,7 +591,6 @@ const Panel = (() => {
     clearRankLegend,
     updateZoneSummary,
     setStatsCsvStatus,
-    wireStatsFile,
     setBoundaryStatus,
     wireReset,
     wireReportButton,

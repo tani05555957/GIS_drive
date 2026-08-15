@@ -72,8 +72,14 @@ const DeliveryPlan = (() => {
       detailTableBody: document.getElementById("detail-table-body"),
       detailCsvBtn: document.getElementById("detail-csv-btn"),
 
-      saveNameInput: document.getElementById("save-plan-name"),
-      saveBtn: document.getElementById("save-plan-btn"),
+      headerSaveBtn: document.getElementById("header-save-btn"),
+      headerSaveDropdown: document.getElementById("header-save-dropdown"),
+      headerSaveName: document.getElementById("header-save-name"),
+      headerSaveConfirmBtn: document.getElementById("header-save-confirm-btn"),
+      headerResumeBtn: document.getElementById("header-resume-btn"),
+      headerResumeDropdown: document.getElementById("header-resume-dropdown"),
+      headerResumeSearch: document.getElementById("header-resume-search"),
+      headerResumeList: document.getElementById("header-resume-list"),
 
       gate: document.getElementById("start-gate"),
       gateMethodNew: document.getElementById("gate-method-new"),
@@ -85,11 +91,11 @@ const DeliveryPlan = (() => {
       gateStartBtn: document.getElementById("gate-start-btn"),
     };
 
-    els.saveNameInput.value = defaultPlanName();
     els.gateNameInput.value = defaultPlanName();
 
     wireActions();
     wireStartGate();
+    wireHeaderPlanMenu();
   }
 
   // ---------------- 開始ゲート(①作成方法の指定) ----------------
@@ -143,7 +149,7 @@ const DeliveryPlan = (() => {
           planState.createdAt = null;
         }
       }
-      els.saveNameInput.value = els.gateNameInput.value.trim() || defaultPlanName();
+      els.headerSaveName.value = els.gateNameInput.value.trim() || defaultPlanName();
 
       els.gate.classList.add("hidden");
       document.getElementById("app-header").classList.remove("app-hidden");
@@ -153,6 +159,66 @@ const DeliveryPlan = (() => {
     } finally {
       els.gateStartBtn.disabled = false;
     }
+  }
+
+  // ---------------- ヘッダー「保存」「再開」メニュー ----------------
+  function wireHeaderPlanMenu() {
+    els.headerSaveBtn.addEventListener("click", () => {
+      els.headerResumeDropdown.classList.add("hidden");
+      const opening = els.headerSaveDropdown.classList.contains("hidden");
+      els.headerSaveDropdown.classList.toggle("hidden");
+      if (opening) {
+        els.headerSaveName.value = els.headerSaveName.value.trim() || defaultPlanName();
+        els.headerSaveName.focus();
+      }
+    });
+    els.headerSaveConfirmBtn.addEventListener("click", () => {
+      savePlan(els.headerSaveName.value);
+      els.headerSaveDropdown.classList.add("hidden");
+    });
+
+    els.headerResumeBtn.addEventListener("click", () => {
+      els.headerSaveDropdown.classList.add("hidden");
+      const opening = els.headerResumeDropdown.classList.contains("hidden");
+      els.headerResumeDropdown.classList.toggle("hidden");
+      if (opening) {
+        els.headerResumeSearch.value = "";
+        renderHeaderResumeList();
+        els.headerResumeSearch.focus();
+      }
+    });
+    els.headerResumeSearch.addEventListener("input", renderHeaderResumeList);
+
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest(".header-plan-menu")) {
+        els.headerSaveDropdown.classList.add("hidden");
+        els.headerResumeDropdown.classList.add("hidden");
+      }
+    });
+  }
+
+  function renderHeaderResumeList() {
+    const q = els.headerResumeSearch.value.trim().toLowerCase();
+    const plans = loadSavedPlans()
+      .filter((p) => !q || p.name.toLowerCase().includes(q))
+      .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+    els.headerResumeList.innerHTML =
+      plans
+        .map(
+          (p) =>
+            `<li data-id="${p.id}">${escapeHtml(p.name)} <span class="hint small">(${tsReadable(p.updatedAt)})</span></li>`
+        )
+        .join("") || "<li>該当する保存済みプランがありません</li>";
+    els.headerResumeList.querySelectorAll("li[data-id]").forEach((li) =>
+      li.addEventListener("click", async () => {
+        const plan = loadSavedPlans().find((p) => p.id === li.dataset.id);
+        if (!plan) return;
+        planState.id = plan.id;
+        planState.createdAt = plan.createdAt;
+        els.headerResumeDropdown.classList.add("hidden");
+        await applyPlanState(plan.state);
+      })
+    );
   }
 
   // ---------------- ⑤ 予算通数・分析ロジック ----------------
@@ -231,6 +297,10 @@ const DeliveryPlan = (() => {
     const rank = RankEngine.getLast();
     if (rank.mode === "none") {
       alert("先に「条件を選択」でランキングに使う指標を選択してください。");
+      return;
+    }
+    if (!els.selectAllTowns.checked && !(Number(els.budgetCount.value) > 0)) {
+      alert("予算通数(目標値)を入力するか、「全町丁目を選択」にチェックを入れてください。");
       return;
     }
     const selection = computeBudgetSelection(features);
@@ -373,7 +443,10 @@ const DeliveryPlan = (() => {
       }
     } else if (state.zoneMethod === "multiStore") {
       const multiRadius = document.getElementById("multistore-radius");
-      if (multiRadius) multiRadius.value = state.multiRadius ?? 500;
+      if (multiRadius) {
+        multiRadius.value = state.multiRadius ?? 500;
+        multiRadius.dispatchEvent(new Event("input"));
+      }
       const multiList = document.getElementById("multistore-list");
       (state.multiStoreIds || []).forEach((id) => {
         const cb = multiList?.querySelector(`.multi-store-check[value="${id}"]`);
@@ -383,21 +456,22 @@ const DeliveryPlan = (() => {
       AppMap.setMultiStoreSelection(Panel.getCheckedMultiStoreIds());
     }
 
-    els.budgetCount.value = state.budget?.count ?? 50000;
+    els.budgetCount.value = state.budget?.count || "";
     els.selectAllTowns.checked = !!state.budget?.selectAll;
+    els.budgetCount.disabled = els.selectAllTowns.checked;
     els.excludeZero.checked = state.budget?.excludeZero !== false;
     if (state.budget?.mode === "households") els.budgetModeHouseholds.checked = true;
     else els.budgetModeDeliverable.checked = true;
   }
 
   // ---------------- 保存・リセット ----------------
-  function savePlan() {
-    const name = els.saveNameInput.value.trim() || defaultPlanName();
+  function savePlan(name) {
+    const finalName = (name || "").trim() || defaultPlanName();
     const plans = loadSavedPlans();
     const nowIso = new Date().toISOString();
     const snapshot = {
       id: planState.id || uid(),
-      name,
+      name: finalName,
       createdAt: planState.createdAt || nowIso,
       updatedAt: nowIso,
       state: serializePlanState(),
@@ -408,11 +482,12 @@ const DeliveryPlan = (() => {
     persistSavedPlans(plans);
     planState.id = snapshot.id;
     planState.createdAt = snapshot.createdAt;
-    alert(`プラン「${name}」を保存しました`);
+    alert(`プラン「${finalName}」を保存しました`);
   }
 
   function reset() {
-    els.budgetCount.value = 50000;
+    els.budgetCount.value = "";
+    els.budgetCount.disabled = false;
     els.selectAllTowns.checked = false;
     els.budgetModeDeliverable.checked = true;
     els.excludeZero.checked = true;
@@ -426,7 +501,9 @@ const DeliveryPlan = (() => {
     els.analyzeBtn.addEventListener("click", runAnalysis);
     els.detailToggleBtn.addEventListener("click", toggleDetail);
     els.detailCsvBtn.addEventListener("click", exportDetailCsv);
-    els.saveBtn.addEventListener("click", savePlan);
+    els.selectAllTowns.addEventListener("change", () => {
+      els.budgetCount.disabled = els.selectAllTowns.checked;
+    });
   }
 
   return { init, reset, exportReportBundle };
