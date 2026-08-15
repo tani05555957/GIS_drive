@@ -83,11 +83,21 @@ document.addEventListener("DOMContentLoaded", () => {
         Panel.setBoundaryStatus("");
       } else {
         Panel.setBoundaryStatus("町丁目境界を読み込み中…");
-        const radius = Panel.getMultiStoreRadius();
-        const shapes = info.selectedStoreIds
-          .map((id) => StoreManager.getStoreById(id))
-          .filter(Boolean)
-          .map((store) => ShapeBuilders.circle(store.lat, store.lon, radius));
+        const storeList = info.selectedStoreIds.map((id) => StoreManager.getStoreById(id)).filter(Boolean);
+        const shapeType = Panel.getMultiStoreShapeType();
+        let shapes;
+        if (shapeType === "time") {
+          const opts = Panel.getMultiStoreTimeOptions();
+          shapes = await Promise.all(
+            storeList.map((s) => ShapeBuilders.time({ lat: s.lat, lon: s.lon, mode: opts.mode, minutes: opts.minutes, apiKey: opts.apiKey }))
+          );
+        } else if (shapeType === "train") {
+          shapes = await Promise.all(storeList.map((s) => ShapeBuilders.train({ lat: s.lat, lon: s.lon })));
+        } else {
+          const radius = Panel.getMultiStoreRadius();
+          shapes = storeList.map((store) => ShapeBuilders.circle(store.lat, store.lon, radius));
+        }
+        if (requestId !== boundaryRequestId) return;
         const { features, anyTooBroad } = await unionFeaturesForShapes(shapes);
         if (requestId !== boundaryRequestId) return;
         AppMap.renderBoundaryFeatures(features);
@@ -158,6 +168,9 @@ document.addEventListener("DOMContentLoaded", () => {
       AppMap.applyBoundaryColors(rank.colorByKeyCode, { fallbackFill: NO_DATA_FILL, fallbackBorder: NO_DATA_BORDER });
       Panel.updateRankLegend(rank.legend.breaks, rank.legend.colors, rank.legend.unitLabel, rank.legend.format);
     }
+
+    // 予算通数の指定(数値変更で自動反映)。有効な場合はヘッダーの商圏サマリーもこちらの選択結果に連動する
+    DeliveryPlan.refreshBudgetSelection();
   }
 
   function debounce(fn, wait) {

@@ -311,12 +311,20 @@ const AppMap = (() => {
     trainGeojsons = [];
   }
 
-  /** 起点ポイントを置き換える(通常クリック・店舗選択で使用) */
+  /**
+   * 起点ポイントを置き換える(通常クリック・店舗選択・クリアで使用)。
+   * 円・所要時間・電車モードで起点が0件になった場合は、表示中の商圏(町丁目ポリゴン)も
+   * 消去されるよう shapeCleared を発火する(main.js の refreshBoundaries が反応する)。
+   */
   function setOriginPoints(latlngs) {
     originPoints = latlngs.slice();
     redrawOriginMarkers();
-    if (originPoints.length === 0) clearOriginShapes();
-    else rebuildActiveOriginShape();
+    if (originPoints.length === 0) {
+      clearOriginShapes();
+      if (mode === "circle" || mode === "time" || mode === "train") emit("shapeCleared");
+    } else {
+      rebuildActiveOriginShape();
+    }
     emit("originPointsChanged", getOriginPoints());
   }
 
@@ -328,11 +336,9 @@ const AppMap = (() => {
     emit("originPointsChanged", getOriginPoints());
   }
 
+  /** 起点ポイントをすべてクリアする(「ポイントをクリア」ボタン用) */
   function clearOriginPoints() {
-    originPoints = [];
-    redrawOriginMarkers();
-    clearOriginShapes();
-    emit("originPointsChanged", getOriginPoints());
+    setOriginPoints([]);
   }
 
   function getOriginPoints() {

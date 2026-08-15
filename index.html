@@ -157,8 +157,33 @@
           <label class="opt-label">対象店舗(複数選択可)</label>
           <label class="segment-option"><input type="checkbox" id="multistore-select-all"> すべて選択</label>
           <div id="multistore-list" class="checklist"></div>
-          <label class="opt-label">半径: <span id="multistore-radius-val">500</span> m</label>
-          <input type="range" id="multistore-radius" min="100" max="10000" step="100" value="500">
+
+          <label class="opt-label">商圏の作成方法</label>
+          <div class="segmented" id="multistore-shape-type">
+            <button data-type="circle" class="seg-btn active"><i class="fa-regular fa-circle"></i> 円</button>
+            <button data-type="time" class="seg-btn"><i class="fa-regular fa-clock"></i> 所要時間</button>
+            <button data-type="train" class="seg-btn"><i class="fa-solid fa-train"></i> 電車</button>
+          </div>
+
+          <div id="multistore-circle-opts">
+            <label class="opt-label">半径: <span id="multistore-radius-val">500</span> m</label>
+            <input type="range" id="multistore-radius" min="100" max="10000" step="100" value="500">
+          </div>
+
+          <div id="multistore-time-opts" class="hidden">
+            <label class="opt-label">移動手段</label>
+            <div class="segmented" id="multistore-time-mode">
+              <button data-mode="walk" class="seg-btn active"><i class="fa-solid fa-person-walking"></i> 徒歩</button>
+              <button data-mode="bike" class="seg-btn"><i class="fa-solid fa-person-biking"></i> 自転車</button>
+              <button data-mode="car" class="seg-btn"><i class="fa-solid fa-car"></i> 車</button>
+            </div>
+            <label class="opt-label">所要時間: <span id="multistore-time-minutes-val">10</span> 分</label>
+            <input type="range" id="multistore-time-minutes" min="1" max="60" step="1" value="10">
+            <label class="opt-label">ORS APIキー(任意・道路network等時間圏)</label>
+            <input type="text" id="multistore-ors-api-key" class="text-input" placeholder="未入力の場合は直線距離による近似円">
+          </div>
+
+          <p id="multistore-train-hint" class="hint small hidden">最寄り駅(Overpass API)を自動検索し、店舗ごとに徒歩圏+概算鉄道到達圏を作成します(店舗数が多い場合、時間がかかることがあります)。</p>
         </div>
       </section>
 
@@ -204,7 +229,7 @@
           <label class="segment-option"><input type="checkbox" id="select-all-towns"> 全町丁目を選択</label>
         </div>
         <p class="hint small">
-          「条件を選択」で設定したランキングの上位(商圏内)から、指定した通数に近くなるところまで町丁目を選びます。先に条件を選択してください。
+          「条件を選択」で設定したランキングの上位(商圏内)から、指定した通数に近くなるところまで町丁目を自動的に選びます(先に条件を選択してください)。数値を変更すると即座に反映されます。
         </p>
 
         <label class="opt-label">数を合わせる基準</label>
@@ -223,7 +248,6 @@
           <span id="budget-town-count" class="budget-value">0</span>
         </div>
 
-        <button id="analyze-btn" class="btn-primary"><i class="fa-solid fa-play"></i> 実行</button>
         <button id="detail-toggle-btn" class="btn-secondary small">明細を表示</button>
         <div id="detail-panel" class="hidden">
           <div class="detail-table-wrap">

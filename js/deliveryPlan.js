@@ -66,7 +66,6 @@ const DeliveryPlan = (() => {
       excludeZero: document.getElementById("exclude-zero"),
       budgetTownCount: document.getElementById("budget-town-count"),
 
-      analyzeBtn: document.getElementById("analyze-btn"),
       detailToggleBtn: document.getElementById("detail-toggle-btn"),
       detailPanel: document.getElementById("detail-panel"),
       detailTableBody: document.getElementById("detail-table-body"),
@@ -288,21 +287,26 @@ const DeliveryPlan = (() => {
     els.budgetTownCount.textContent = String(townCount);
   }
 
-  function runAnalysis() {
+  /**
+   * 予算通数(目標値)・基準・「全町丁目を選択」の状態に応じて対象町丁目を再計算し、
+   * 選外の町丁目を透明化して表示する。ボタン操作なしに、関連する値が変わるたびに自動実行される
+   * (main.js の recompute() 末尾、および本ファイルの各種変更イベントから呼ばれる)。
+   */
+  function refreshBudgetSelection() {
     const features = AppMap.getActiveFeatures();
-    if (features.length === 0) {
-      alert("商圏が設定されていません。商圏作成方法を選択し、範囲を指定してください。");
-      return;
-    }
     const rank = RankEngine.getLast();
-    if (rank.mode === "none") {
-      alert("先に「条件を選択」でランキングに使う指標を選択してください。");
+    const ready = features.length > 0 && rank.mode !== "none" && (els.selectAllTowns.checked || Number(els.budgetCount.value) > 0);
+
+    if (!ready) {
+      lastAnalysis = null;
+      updateBudgetDisplay({ deliverable: 0, households: 0 }, 0);
+      if (!els.detailPanel.classList.contains("hidden")) {
+        els.detailPanel.classList.add("hidden");
+        els.detailToggleBtn.textContent = "明細を表示";
+      }
       return;
     }
-    if (!els.selectAllTowns.checked && !(Number(els.budgetCount.value) > 0)) {
-      alert("予算通数(目標値)を入力するか、「全町丁目を選択」にチェックを入れてください。");
-      return;
-    }
+
     const selection = computeBudgetSelection(features);
     lastAnalysis = selection;
 
@@ -319,13 +323,15 @@ const DeliveryPlan = (() => {
     });
 
     updateBudgetDisplay(selection.totals, selection.townCount);
+    // ヘッダーの商圏サマリーは、予算通数の指定で選ばれた町丁目の集計値に連動させる
+    Panel.updateZoneSummary(selection.rows.map((r) => r.feature));
     if (!els.detailPanel.classList.contains("hidden")) renderDetailTable();
   }
 
   // ---------------- 明細 ----------------
   function toggleDetail() {
     if (!lastAnalysis) {
-      alert("先に「分析開始」を実行してください");
+      alert("商圏を指定し、「条件を選択」で指標を選んだうえで、予算通数を入力してください");
       return;
     }
     const showing = !els.detailPanel.classList.contains("hidden");
@@ -400,6 +406,10 @@ const DeliveryPlan = (() => {
       timeMinutes: Number(document.getElementById("time-minutes")?.value) || 10,
       multiStoreIds: Panel.getCheckedMultiStoreIds(),
       multiRadius: Panel.getMultiStoreRadius(),
+      multiShapeType: Panel.getMultiStoreShapeType(),
+      multiTimeMode: document.querySelector("#multistore-time-mode .seg-btn.active")?.dataset.mode || "walk",
+      multiTimeMinutes: Number(document.getElementById("multistore-time-minutes")?.value) || 10,
+      multiOrsApiKey: document.getElementById("multistore-ors-api-key")?.value.trim() || "",
       budget: {
         count: Number(els.budgetCount.value) || 0,
         selectAll: els.selectAllTowns.checked,
@@ -442,11 +452,23 @@ const DeliveryPlan = (() => {
         minutesInput.dispatchEvent(new Event("input"));
       }
     } else if (state.zoneMethod === "multiStore") {
+      const shapeTypeBtn = document.querySelector(`#multistore-shape-type .seg-btn[data-type="${state.multiShapeType || "circle"}"]`);
+      if (shapeTypeBtn) shapeTypeBtn.click();
       const multiRadius = document.getElementById("multistore-radius");
       if (multiRadius) {
         multiRadius.value = state.multiRadius ?? 500;
         multiRadius.dispatchEvent(new Event("input"));
       }
+      const multiTimeModeBtn = document.querySelector(`#multistore-time-mode .seg-btn[data-mode="${state.multiTimeMode || "walk"}"]`);
+      if (multiTimeModeBtn) multiTimeModeBtn.click();
+      const multiTimeMinutes = document.getElementById("multistore-time-minutes");
+      if (multiTimeMinutes) {
+        multiTimeMinutes.value = state.multiTimeMinutes ?? 10;
+        multiTimeMinutes.dispatchEvent(new Event("input"));
+      }
+      const multiOrsApiKey = document.getElementById("multistore-ors-api-key");
+      if (multiOrsApiKey) multiOrsApiKey.value = state.multiOrsApiKey || "";
+
       const multiList = document.getElementById("multistore-list");
       (state.multiStoreIds || []).forEach((id) => {
         const cb = multiList?.querySelector(`.multi-store-check[value="${id}"]`);
@@ -497,14 +519,27 @@ const DeliveryPlan = (() => {
     els.detailToggleBtn.textContent = "明細を表示";
   }
 
+  function debounce(fn, wait) {
+    let timer = null;
+    return (...args) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), wait);
+    };
+  }
+  const debouncedRefreshBudget = debounce(refreshBudgetSelection, 350);
+
   function wireActions() {
-    els.analyzeBtn.addEventListener("click", runAnalysis);
     els.detailToggleBtn.addEventListener("click", toggleDetail);
     els.detailCsvBtn.addEventListener("click", exportDetailCsv);
     els.selectAllTowns.addEventListener("change", () => {
       els.budgetCount.disabled = els.selectAllTowns.checked;
+      refreshBudgetSelection();
     });
+    els.budgetCount.addEventListener("input", debouncedRefreshBudget);
+    els.budgetModeDeliverable.addEventListener("change", refreshBudgetSelection);
+    els.budgetModeHouseholds.addEventListener("change", refreshBudgetSelection);
+    els.excludeZero.addEventListener("change", refreshBudgetSelection);
   }
 
-  return { init, reset, exportReportBundle };
+  return { init, reset, exportReportBundle, refreshBudgetSelection };
 })();

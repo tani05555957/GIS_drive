@@ -51,8 +51,16 @@ const Panel = (() => {
 
       multiStoreList: document.getElementById("multistore-list"),
       multiStoreSelectAll: document.getElementById("multistore-select-all"),
+      multiStoreShapeType: document.getElementById("multistore-shape-type"),
+      multiStoreCircleOpts: document.getElementById("multistore-circle-opts"),
+      multiStoreTimeOpts: document.getElementById("multistore-time-opts"),
+      multiStoreTrainHint: document.getElementById("multistore-train-hint"),
       multiStoreRadius: document.getElementById("multistore-radius"),
       multiStoreRadiusVal: document.getElementById("multistore-radius-val"),
+      multiStoreTimeMode: document.getElementById("multistore-time-mode"),
+      multiStoreTimeMinutes: document.getElementById("multistore-time-minutes"),
+      multiStoreTimeMinutesVal: document.getElementById("multistore-time-minutes-val"),
+      multiStoreOrsApiKey: document.getElementById("multistore-ors-api-key"),
 
       conditionBtn: document.getElementById("condition-btn"),
       segmentPanel: document.getElementById("segment-panel"),
@@ -304,18 +312,62 @@ const Panel = (() => {
   }
 
   // ---------------- 多店舗分析 ----------------
+  let multiStoreShapeType = "circle"; // 'circle' | 'time' | 'train'
+  let multiStoreTravelMode = "walk";
+
   function wireMultiStoreOptions() {
+    els.multiStoreShapeType.querySelectorAll(".seg-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        multiStoreShapeType = btn.dataset.type;
+        els.multiStoreShapeType.querySelectorAll(".seg-btn").forEach((b) => b.classList.toggle("active", b === btn));
+        els.multiStoreCircleOpts.classList.toggle("hidden", multiStoreShapeType !== "circle");
+        els.multiStoreTimeOpts.classList.toggle("hidden", multiStoreShapeType !== "time");
+        els.multiStoreTrainHint.classList.toggle("hidden", multiStoreShapeType !== "train");
+        if (currentShape === "multiStore") onMultiStoreCheckChange();
+      });
+    });
+
     els.multiStoreRadius.addEventListener("input", () => {
       els.multiStoreRadiusVal.textContent = els.multiStoreRadius.value;
     });
     els.multiStoreRadius.addEventListener("change", () => {
       if (currentShape === "multiStore") onMultiStoreCheckChange();
     });
+
+    els.multiStoreTimeMode.querySelectorAll(".seg-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        multiStoreTravelMode = btn.dataset.mode;
+        els.multiStoreTimeMode.querySelectorAll(".seg-btn").forEach((b) => b.classList.toggle("active", b === btn));
+        if (currentShape === "multiStore") onMultiStoreCheckChange();
+      });
+    });
+    els.multiStoreTimeMinutes.addEventListener("input", () => {
+      els.multiStoreTimeMinutesVal.textContent = els.multiStoreTimeMinutes.value;
+    });
+    els.multiStoreTimeMinutes.addEventListener("change", () => {
+      if (currentShape === "multiStore") onMultiStoreCheckChange();
+    });
+    els.multiStoreOrsApiKey.addEventListener("change", () => {
+      if (currentShape === "multiStore") onMultiStoreCheckChange();
+    });
+
     els.multiStoreSelectAll.addEventListener("change", () => {
       const checked = els.multiStoreSelectAll.checked;
       els.multiStoreList.querySelectorAll(".multi-store-check").forEach((cb) => (cb.checked = checked));
       onMultiStoreCheckChange();
     });
+  }
+
+  function getMultiStoreShapeType() {
+    return multiStoreShapeType;
+  }
+
+  function getMultiStoreTimeOptions() {
+    return {
+      mode: multiStoreTravelMode,
+      minutes: Number(els.multiStoreTimeMinutes.value) || 10,
+      apiKey: els.multiStoreOrsApiKey.value.trim(),
+    };
   }
 
   function populateMultiStoreList() {
@@ -580,6 +632,8 @@ const Panel = (() => {
     getCheckedCityCodes,
     getCheckedMultiStoreIds,
     getMultiStoreRadius,
+    getMultiStoreShapeType,
+    getMultiStoreTimeOptions,
     syncMultiStoreSelectAll,
     setConditionEnabled,
     getSelections,
